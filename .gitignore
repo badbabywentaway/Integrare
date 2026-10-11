@@ -1,0 +1,28 @@
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+
+# Gradle / Kotlin
+.gradle
+.kotlin
+build/
+**/build/
+
+# Compiled output and packages
+*.class
+*.log
+*.jar
+*.zip
+
+# Avoid ignoring Gradle wrapper jar file (.jar files are usually ignored)
+!gradle-wrapper.jar
+
+# OS
+.DS_Store
+Thumbs.db
+[Dd]esktop.ini
+
+.claude/
