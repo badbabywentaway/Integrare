@@ -57,6 +57,17 @@ publishing {
         create<MavenPublication>("maven") {
             artifactId = "integrare"
             from(components["java"])
+            pom {
+                name.set("Integrare")
+                description.set(project.property("description").toString())
+                url.set("https://github.com/badbabywentaway/Integrare")
+                licenses {
+                    license {
+                        name.set("GNU Lesser General Public License v3.0 or later")
+                        url.set("https://www.gnu.org/licenses/lgpl-3.0.html")
+                    }
+                }
+            }
         }
     }
 }
