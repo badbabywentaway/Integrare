@@ -233,7 +233,13 @@ class OraxenSetup(
 
     // ── Recipes ──────────────────────────────────────────────────────────────
 
+    /**
+     * Appends the catalog's recipes to Oraxen's shared recipe files, first removing
+     * any entries a previous install left there (e.g. after its items file was
+     * deleted), so repeated installs never duplicate keys.
+     */
     private fun appendRecipes() {
+        removeOwnRecipes()
         val shapeless = recipes.filterIsInstance<CatalogRecipe.Shapeless>()
         val shaped = recipes.filterIsInstance<CatalogRecipe.Shaped>()
         if (shapeless.isNotEmpty()) shapelessFile.appendText(buildString { shapeless.forEach { appendShapeless(it) } })
@@ -316,6 +322,11 @@ class OraxenSetup(
             File(packFolder, "assets/minecraft/models/block/${block.id}.json").delete()
             File(packFolder, "assets/minecraft/models/item/${block.id}.json").delete()
         }
+        removeOwnRecipes()
+    }
+
+    /** Removes every entry keyed with one of the catalog's recipe keys, and its comment. */
+    private fun removeOwnRecipes() {
         val keys = catalog.recipes.map { Regex.escape(recipeKey(it)) }
         val recipeBlock = Regex(
             "(\\n# ${Regex.escape(pluginName)} recipe)?\\n(${keys.joinToString("|")}):.*?(?=\\n#|\\n\\w+:|$)",
