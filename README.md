@@ -52,26 +52,90 @@ Add them as `softdepend` in your `plugin.yml` so they load before your plugin.
 Oraxen and Nexo have no namespaces: the namespace is stripped on lookup, and
 identified items come back as `oraxen:<id>` / `nexo:<id>`.
 
+## Describing your items once: ItemCatalog
+
+Describe your items and recipes once as an `ItemCatalog`, and Integrare writes
+the configuration for whichever provider the server runs:
+
+```kotlin
+val catalog = ItemCatalog(
+    namespace = "myplugin",
+    items = listOf(
+        CatalogItem.Block("ruby_block", "<red>Ruby Block", texture = "block/ruby"),
+        CatalogItem.Item(
+            "ruby_pickaxe", "<red>Ruby Pickaxe", texture = "item/ruby_pickaxe",
+            baseMaterial = Material.GOLDEN_PICKAXE, handheld = true,
+            durability = 250, miningTier = ToolTier.IRON, attackDamage = 4.0, attackSpeed = -2.8
+        )
+    ),
+    recipes = listOf(
+        CatalogRecipe.Shaped(
+            "ruby_pickaxe", "ruby_pickaxe", listOf("RRR", " S ", " S "),
+            mapOf('R' to Ingredient.Custom("ruby_block"), 'S' to Ingredient.Vanilla("STICK"))
+        )
+    ),
+    // PNGs at <root>/<texture>.png in your jar; REDUCED is used where pack size matters
+    textures = TextureSource.fromPluginJar(this, fullRoot = "textures", reducedRoot = "textures-256")
+)
+```
+
+Then install it into the active provider, e.g. from an admin command:
+
+```kotlin
+val setup = ProviderSetup.forProvider(items.getProvider()!!, this, catalog) { native ->
+    NativeSetup(catalog, native, dataFolder, logger, cmdBase = 1000,
+        zipFileName = "MyPlugin-pack.zip", packDescription = "MyPlugin items")
+}
+if (setup != null && !setup.isAlreadySetup()) {
+    val result = setup.install()
+    result.messages.forEach { logger.info(it) }
+    logger.info("Next: ${setup.nextSteps}")
+}
+```
+
+| Setup             | Writes                                                                 |
+|-------------------|------------------------------------------------------------------------|
+| `ItemsAdderSetup` | `contents/<namespace>/` (blocks.yml, items.yml, textures), enables the namespace |
+| `OraxenSetup`     | `items/<namespace>_blocks.yml`, appends to `recipes/shaped.yml`/`shapeless.yml`, models and textures in `pack/` |
+| `NexoSetup`       | `items/<namespace>_blocks.yml`, `recipes/{shaped,shapeless}/<namespace>.yml`, `pack/assets/<namespace>/` |
+| `NativeSetup`     | registers items and recipes, generates a resource pack zip            |
+
+`install(force = true)` removes the previous installation first.
+
+### Numbering is permanent
+
+Oraxen custom variations, native custom model data and native note block states
+are assigned in catalog order. Placed blocks and items in inventories are stored
+as those numbers, so **only ever append** to the catalog. If you need a different
+listing order, pin the numbering with `slotOrder`:
+
+```kotlin
+ItemCatalog(..., slotOrder = mapOf(ProviderKind.NATIVE to listOf("ruby_block", "ruby_pickaxe")))
+```
+
+Per-provider deviations (e.g. keeping the display name existing items were
+created with) go in `CatalogItem.overrides`.
+
 ### Native fallback
 
 With no external item plugin installed the manager returns a `NativeItemProvider`.
 Items are vanilla `PAPER` with custom model data and an NBT tag; placed blocks are
-note blocks whose instrument/note state selects the texture. Your plugin is
-responsible for registering its items and for generating the resource pack:
+note blocks whose instrument/note state selects the texture. `NativeSetup`
+registers the catalog and builds the pack; serving it is up to your plugin:
 
 ```kotlin
 val native = items.getProvider() as? NativeItemProvider ?: return
-native.registerItem("myplugin:ruby_block", 1000, Component.text("Ruby Block"))
-native.registerBlockState("myplugin:ruby_block", Instrument.PIANO, 0)
-native.loadPlacedBlocks(File(dataFolder, "placed-blocks.txt"))
+val nativeSetup = NativeSetup(catalog, native, dataFolder, logger, 1000, "MyPlugin-pack.zip", "MyPlugin items")
+nativeSetup.registerItems()   // every startup, before item lookups
 
-server.pluginManager.registerEvents(NativePlacementListener(this, native), this)
+server.pluginManager.registerEvents(NativePlacementListener(this, native) { catalog.isBlock(it.namespacedId) }, this)
 server.pluginManager.registerEvents(NativePackListener(native) { config.getBoolean("pack-required") }, this)
 
-// Once you have a pack zip:
-native.packHash = sha1(zipFile)
-native.packUrl = "http://$host:$port/${zipFile.name}"
-NativePackServer(logger).start(zipFile, port)
+// After nativeSetup.install() has generated the zip:
+val zip = nativeSetup.zipFile
+native.packHash = nativeSetup.computePackHash(zip)
+native.packUrl = "http://$host:$port/${zip.name}"
+NativePackServer(logger).start(zip, port)
 ```
 
 Native blocks need `block-updates.disable-noteblock-updates: true` in
@@ -87,7 +151,7 @@ repositories {
 }
 
 dependencies {
-    implementation("com.github.badbabywentaway:Integrare:0.1.0")
+    implementation("com.github.badbabywentaway:Integrare:0.2.0")
 }
 
 tasks.shadowJar {
@@ -108,8 +172,9 @@ Requires JDK 25.
 ## Status
 
 - Targets Paper 26.3.
-- The Nexo provider is written against Nexo's public API but has not been run
-  against a live Nexo server (premium license required).
+- The Nexo provider and `NexoSetup` are written against Nexo's public API and
+  the config keys its parsers read, but have not been run against a live Nexo
+  server (premium license required).
 
 ## License
 

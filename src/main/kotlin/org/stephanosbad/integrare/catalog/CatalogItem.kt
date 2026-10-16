@@ -95,7 +95,27 @@ sealed interface CatalogItem {
     )
 }
 
-enum class ToolKind { PICKAXE, AXE, SHOVEL, HOE }
+enum class ToolKind {
+    PICKAXE, AXE, SHOVEL, HOE;
 
-/** Vanilla tool tiers, lowest first; names match the vanilla material prefixes. */
-enum class ToolTier { WOODEN, STONE, COPPER, IRON, GOLDEN, DIAMOND, NETHERITE }
+    /** Block tag of blocks this kind of tool mines quickly */
+    val mineableTag: String get() = "minecraft:mineable/${name.lowercase()}"
+}
+
+/**
+ * Vanilla tool tiers, lowest first; names match the vanilla material prefixes.
+ *
+ * @property miningSpeed Speed on blocks the tool is meant for, as in vanilla
+ * @property incorrectForDropsTag Block tag of blocks this tier is too low to harvest
+ */
+enum class ToolTier(val miningSpeed: Double, tagName: String) {
+    WOODEN(2.0, "wooden"),
+    STONE(4.0, "stone"),
+    COPPER(5.0, "copper"),
+    IRON(6.0, "iron"),
+    GOLDEN(12.0, "gold"),
+    DIAMOND(8.0, "diamond"),
+    NETHERITE(9.0, "netherite");
+
+    val incorrectForDropsTag: String = "minecraft:incorrect_for_${tagName}_tool"
+}

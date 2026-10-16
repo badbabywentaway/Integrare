@@ -73,7 +73,13 @@ class NativeSetup(
     private val zipFileName: String,
     private val packDescription: String,
     private val resolveMaterial: (String) -> Material? = Material::matchMaterial
-) {
+) : ProviderSetup {
+
+    override val kind = ProviderKind.NATIVE
+
+    override val nextSteps = listOf("Host the generated zip as the server resource pack")
+
+    override val serverRequirements = ProviderSetup.NOTE_BLOCK_REQUIREMENTS
 
     private val namespace = catalog.namespace
     private val packRoot = File(dataFolder, "native-pack")
@@ -94,15 +100,17 @@ class NativeSetup(
 
     val zipFile: File get() = File(dataFolder, zipFileName)
 
-    fun isAlreadySetup(): Boolean = provider.registeredItemCount() > 0
+    /** Whether the resource pack has been generated */
+    override fun isAlreadySetup(): Boolean = packMeta.exists()
 
-    fun isPackGenerated(): Boolean = packMeta.exists()
+    /** Generates the resource pack; see [generatePack] */
+    override fun install(force: Boolean): SetupResult = generatePack(force)
 
     // ── Startup registration ─────────────────────────────────────────────────
 
     /** Registers every catalog item and recipe with the provider. Call during onEnable. */
     fun registerItems() {
-        if (isAlreadySetup()) return
+        if (provider.registeredItemCount() > 0) return
         for (item in slotted) {
             val namespacedId = catalog.namespacedId(item)
             when (item) {
@@ -197,7 +205,7 @@ class NativeSetup(
     fun generatePack(force: Boolean = false): SetupResult {
         val messages = mutableListOf<String>()
 
-        if (isPackGenerated() && !force) {
+        if (isAlreadySetup() && !force) {
             return SetupResult(
                 success = true,
                 alreadySetup = true,
