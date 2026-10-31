@@ -41,13 +41,18 @@ import java.util.logging.Logger
  *
  * @param oraxenFolder Oraxen's plugin data folder
  * @param pluginName Name used in generated comments and the README
+ * @param variationOffset Added to every block's `custom_variation` number, so
+ *   this catalog's numbering doesn't collide with another Integrare-based
+ *   plugin's blocks on the same server. Get this from [org.stephanosbad.integrare.SlotRegistry]
+ *   rather than hardcoding it, unless migrating numbers already in use.
  */
 class OraxenSetup(
     private val catalog: ItemCatalog,
     private val oraxenFolder: File,
     private val logger: Logger,
     private val pluginName: String,
-    private val resolveMaterial: (String) -> Material? = Material::matchMaterial
+    private val resolveMaterial: (String) -> Material? = Material::matchMaterial,
+    private val variationOffset: Int = 0
 ) : ProviderSetup {
 
     override val kind = ProviderKind.ORAXEN
@@ -163,7 +168,7 @@ class OraxenSetup(
 
         val variations = catalog.slotOrdered(ProviderKind.ORAXEN)
             .filterIsInstance<CatalogItem.Block>()
-            .withIndex().associate { (index, block) -> block.id to index + 1 }
+            .withIndex().associate { (index, block) -> block.id to variationOffset + index + 1 }
 
         for (item in catalog.items) {
             when (item) {

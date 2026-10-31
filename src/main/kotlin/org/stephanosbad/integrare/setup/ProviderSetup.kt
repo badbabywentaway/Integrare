@@ -20,6 +20,8 @@ package org.stephanosbad.integrare.setup
 import org.bukkit.plugin.Plugin
 import org.stephanosbad.integrare.CustomItemProvider
 import org.stephanosbad.integrare.ProviderKind
+import org.stephanosbad.integrare.SlotRegistry
+import org.stephanosbad.integrare.catalog.CatalogItem
 import org.stephanosbad.integrare.catalog.ItemCatalog
 import org.stephanosbad.integrare.provider.ItemsAdderProvider
 import org.stephanosbad.integrare.provider.NativeItemProvider
@@ -59,19 +61,35 @@ interface ProviderSetup {
         /**
          * The setup for [provider], the provider chosen by CustomItemProviderManager.
          *
+         * Oraxen's `custom_variation` numbering is resolved through [slots] so
+         * it doesn't collide with another Integrare-based plugin on the same
+         * server; a first-time reservation prefers starting at 1 (unshifted),
+         * matching the numbering every catalog used before this existed.
+         * ItemsAdder and Nexo need no such reservation - they assign their own
+         * numbering internally, across every plugin's items. The native
+         * provider's setup is built by [nativeSetup], which already receives
+         * whatever plugin-specific settings (including its own slot
+         * reservations) the caller wants to give it.
+         *
          * @param nativeSetup Builds the native setup, which needs plugin-specific settings
+         * @param slots Backs Oraxen's slot reservation; defaults to the registry shared by every plugin on the server
          */
         fun forProvider(
             provider: CustomItemProvider,
             plugin: Plugin,
             catalog: ItemCatalog,
-            nativeSetup: (NativeItemProvider) -> NativeSetup
+            nativeSetup: (NativeItemProvider) -> NativeSetup,
+            slots: SlotRegistry = SlotRegistry(plugin)
         ): ProviderSetup? {
             fun folder(name: String): File? = plugin.server.pluginManager.getPlugin(name)?.dataFolder
             return when (provider) {
                 is NativeItemProvider -> nativeSetup(provider)
                 is ItemsAdderProvider -> folder("ItemsAdder")?.let { ItemsAdderSetup(catalog, it, plugin.logger, plugin.name) }
-                is OraxenProvider -> folder("Oraxen")?.let { OraxenSetup(catalog, it, plugin.logger, plugin.name) }
+                is OraxenProvider -> folder("Oraxen")?.let {
+                    val blockCount = catalog.items.count { item -> item is CatalogItem.Block }
+                    val range = slots.reserve("oraxen.variation", catalog.namespace, blockCount, preferredStart = 1)
+                    OraxenSetup(catalog, it, plugin.logger, plugin.name, variationOffset = range.first - 1)
+                }
                 is NexoProvider -> folder("Nexo")?.let { NexoSetup(catalog, it, plugin.logger, plugin.name) }
                 else -> null
             }

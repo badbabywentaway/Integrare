@@ -63,6 +63,14 @@ import java.util.zip.ZipOutputStream
  * @param packDescription Description shown in the client's resource pack list
  * @param resolveMaterial Looks up vanilla materials by name; recipes using
  *   materials missing on this server version are skipped
+ * @param cmdBase First custom model data number this catalog's items use. Get
+ *   this from [org.stephanosbad.integrare.SlotRegistry] rather than hardcoding
+ *   it, unless migrating numbers already in use, so it doesn't collide with
+ *   another Integrare-based plugin also falling back to the native provider.
+ * @param noteBlockStateOffset Added to every placed block's note block state
+ *   index - an independent numeric space from [cmdBase], needing the same
+ *   collision avoidance, since two plugins' blocks would otherwise both start
+ *   numbering their note block states from zero.
  */
 class NativeSetup(
     private val catalog: ItemCatalog,
@@ -72,7 +80,8 @@ class NativeSetup(
     private val cmdBase: Int,
     private val zipFileName: String,
     private val packDescription: String,
-    private val resolveMaterial: (String) -> Material? = Material::matchMaterial
+    private val resolveMaterial: (String) -> Material? = Material::matchMaterial,
+    private val noteBlockStateOffset: Int = 0
 ) : ProviderSetup {
 
     override val kind = ProviderKind.NATIVE
@@ -93,8 +102,9 @@ class NativeSetup(
         slotted.withIndex().associate { (index, item) -> item.id to cmdBase + index }
 
     init {
-        require(blocks.size <= NOTE_BLOCK_STATES) {
-            "Native provider supports at most $NOTE_BLOCK_STATES blocks, catalog has ${blocks.size}"
+        require(noteBlockStateOffset + blocks.size <= NOTE_BLOCK_STATES) {
+            "Native provider supports at most $NOTE_BLOCK_STATES blocks, " +
+                "catalog has ${blocks.size} starting at offset $noteBlockStateOffset"
         }
     }
 
@@ -116,7 +126,7 @@ class NativeSetup(
             when (item) {
                 is CatalogItem.Block -> {
                     provider.registerItem(namespacedId, customModelData.getValue(item.id), displayName(item))
-                    val (instrument, note) = noteBlockState(blocks.indexOf(item))
+                    val (instrument, note) = noteBlockState(noteBlockStateOffset + blocks.indexOf(item))
                     provider.registerBlockState(namespacedId, Instrument.valueOf(instrument.bukkitName), note)
                 }
                 is CatalogItem.Item -> provider.registerItemStack(namespacedId, buildItemStack(item))
@@ -341,7 +351,7 @@ class NativeSetup(
      */
     private fun writeNoteBlockStates(): Int {
         val assignments = blocks.withIndex().associate { (index, block) ->
-            val (instrument, note) = noteBlockState(index)
+            val (instrument, note) = noteBlockState(noteBlockStateOffset + index)
             "${instrument.mcName},$note" to "$namespace:block/${modelPath(block)}"
         }
 
