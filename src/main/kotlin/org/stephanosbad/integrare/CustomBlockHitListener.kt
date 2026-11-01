@@ -27,7 +27,6 @@ import org.bukkit.event.block.Action
 import org.bukkit.event.block.BlockBreakEvent
 import org.bukkit.event.block.BlockDamageEvent
 import org.bukkit.event.player.PlayerInteractEvent
-import org.bukkit.plugin.Plugin
 
 /**
  * Fires [onHit] exactly once per physical hit on a matching custom block, regardless
