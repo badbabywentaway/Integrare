@@ -52,14 +52,14 @@ class CustomBlockClickListener(
     // requiring the caller to release it.
     private val recent = mutableMapOf<String, Int>()
 
-    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
+    @EventHandler(priority = EventPriority.LOWEST)
     fun onInteract(event: PlayerInteractEvent) {
         if (event.action != Action.LEFT_CLICK_BLOCK) return
         val block = event.clickedBlock ?: return
         tryHandle(block, event.player)
     }
 
-    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
+    @EventHandler(priority = EventPriority.LOWEST)
     fun onDamage(event: BlockDamageEvent) {
         tryHandle(event.block, event.player)
     }

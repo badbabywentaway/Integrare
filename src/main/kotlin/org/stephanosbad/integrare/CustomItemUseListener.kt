@@ -53,7 +53,7 @@ class CustomItemUseListener(
     private val onUse: (ItemStack, Player) -> Boolean
 ) : Listener {
 
-    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
+    @EventHandler(priority = EventPriority.LOWEST)
     fun onInteract(event: PlayerInteractEvent) {
         if (event.action != Action.RIGHT_CLICK_AIR && event.action != Action.RIGHT_CLICK_BLOCK) return
         val item = event.item ?: return

@@ -60,19 +60,19 @@ class CustomBlockHitListener(
     // deferred onHit completing a tick or two later doesn't need to release it.
     private val processing = mutableMapOf<String, Int>()
 
-    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
+    @EventHandler(priority = EventPriority.LOWEST)
     fun onInteract(event: PlayerInteractEvent) {
         if (event.action != Action.LEFT_CLICK_BLOCK) return
         val block = event.clickedBlock ?: return
         if (tryHandle(block, event.player)) event.isCancelled = true
     }
 
-    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
+    @EventHandler(priority = EventPriority.LOWEST)
     fun onDamage(event: BlockDamageEvent) {
         if (tryHandle(event.block, event.player)) event.isCancelled = true
     }
 
-    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
+    @EventHandler(priority = EventPriority.LOWEST)
     fun onBreak(event: BlockBreakEvent) {
         if (tryHandle(event.block, event.player)) event.isCancelled = true
     }
