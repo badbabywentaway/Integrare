@@ -30,9 +30,9 @@ import java.util.logging.Logger
 /**
  * Installs an [ItemCatalog] into Nexo's plugin folder.
  *
- * Writes `items/<namespace>_blocks.yml`, recipe files under `recipes/shaped/`
- * and `recipes/shapeless/`, and models and textures under
- * `pack/assets/<namespace>/`.
+ * Writes `items/<namespace>_blocks.yml`, recipe files under `recipes/shaped/`,
+ * `recipes/shapeless/`, `recipes/furnace/` and `recipes/stonecutting/`, and
+ * models and textures under `pack/assets/<namespace>/`.
  *
  * Written against Nexo's documented config format and the keys its parsers
  * read; not yet run against a live Nexo server (premium license required).
@@ -55,6 +55,8 @@ class NexoSetup(
     private val assetsFolder = File(nexoFolder, "pack/assets/$namespace")
     private val shapedFile = File(nexoFolder, "recipes/shaped/$namespace.yml")
     private val shapelessFile = File(nexoFolder, "recipes/shapeless/$namespace.yml")
+    private val furnaceFile = File(nexoFolder, "recipes/furnace/$namespace.yml")
+    private val stonecuttingFile = File(nexoFolder, "recipes/stonecutting/$namespace.yml")
     private val readmeFile = File(nexoFolder, "${pluginName}_README.txt")
 
     private val recipes = catalog.recipes.filter { it.isAvailable(resolveMaterial) }
@@ -89,7 +91,7 @@ class NexoSetup(
                 )
             }
             messages.add("Force mode enabled - deleting existing configuration...")
-            listOf(itemsFile, shapedFile, shapelessFile, readmeFile).forEach { it.delete() }
+            listOf(itemsFile, shapedFile, shapelessFile, furnaceFile, stonecuttingFile, readmeFile).forEach { it.delete() }
             assetsFolder.deleteRecursively()
             messages.add("  ✓ Old configuration deleted")
         }
@@ -119,7 +121,8 @@ class NexoSetup(
                 readmeFile, pluginName, "Nexo", catalog,
                 listOf(
                     "items/${itemsFile.name} - item definitions",
-                    "recipes/shaped/$namespace.yml, recipes/shapeless/$namespace.yml - recipes",
+                    "recipes/shaped/$namespace.yml, recipes/shapeless/$namespace.yml, " +
+                        "recipes/furnace/$namespace.yml, recipes/stonecutting/$namespace.yml - recipes",
                     "pack/assets/$namespace/ - textures and block models"
                 ),
                 nextSteps
@@ -154,6 +157,11 @@ class NexoSetup(
             when (item) {
                 is CatalogItem.Block -> appendBlock(item)
                 is CatalogItem.Item -> appendItem(item)
+                // Furniture content generation isn't implemented yet for this provider -
+                // only the runtime place/identify/remove API is (see NexoProvider). A
+                // CatalogItem.Furniture here produces no item definition, so placeFurniture
+                // will fail for it until this is written.
+                is CatalogItem.Furniture -> continue
             }
             appendLine()
         }
@@ -229,8 +237,12 @@ class NexoSetup(
     private fun writeRecipes() {
         val shapeless = recipes.filterIsInstance<CatalogRecipe.Shapeless>()
         val shaped = recipes.filterIsInstance<CatalogRecipe.Shaped>()
+        val furnace = recipes.filterIsInstance<CatalogRecipe.Furnace>()
+        val stonecutting = recipes.filterIsInstance<CatalogRecipe.Stonecutting>()
         if (shapeless.isNotEmpty()) writeRecipeFile(shapelessFile, "Shapeless") { shapeless.forEach { appendShapeless(it) } }
         if (shaped.isNotEmpty()) writeRecipeFile(shapedFile, "Shaped") { shaped.forEach { appendShaped(it) } }
+        if (furnace.isNotEmpty()) writeRecipeFile(furnaceFile, "Furnace") { furnace.forEach { appendFurnace(it) } }
+        if (stonecutting.isNotEmpty()) writeRecipeFile(stonecuttingFile, "Stonecutting") { stonecutting.forEach { appendStonecutting(it) } }
     }
 
     private fun writeRecipeFile(file: File, title: String, body: StringBuilder.() -> Unit) {
@@ -275,6 +287,28 @@ class NexoSetup(
         }
         appendLine("  shape:")
         recipe.shape.forEach { row -> appendLine("    - ${if (' ' in row) "'$row'" else row}") }
+        appendLine()
+    }
+
+    private fun StringBuilder.appendFurnace(recipe: CatalogRecipe.Furnace) {
+        appendLine("${recipe.id}:")
+        appendLine("  experience: ${recipe.experience}")
+        appendLine("  cookingTime: ${recipe.cookingTime}")
+        appendLine("  result:")
+        appendLine("    nexo_item: ${recipe.result}")
+        appendLine("    amount: ${recipe.amount}")
+        appendLine("  input:")
+        appendIngredient(recipe.input)
+        appendLine()
+    }
+
+    private fun StringBuilder.appendStonecutting(recipe: CatalogRecipe.Stonecutting) {
+        appendLine("${recipe.id}:")
+        appendLine("  result:")
+        appendLine("    nexo_item: ${recipe.result}")
+        appendLine("    amount: ${recipe.amount}")
+        appendLine("  input:")
+        appendIngredient(recipe.input)
         appendLine()
     }
 }

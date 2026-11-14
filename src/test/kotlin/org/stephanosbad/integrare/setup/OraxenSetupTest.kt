@@ -48,7 +48,9 @@ class OraxenSetupTest {
         textures = TextureSource { _, _ -> null }
     )
 
-    private fun setup() = OraxenSetup(catalog, oraxenFolder, Logger.getLogger("OraxenSetupTest"), "Test") { Material.STONE }
+    private fun setup() = OraxenSetup(
+        catalog, oraxenFolder, Logger.getLogger("OraxenSetupTest"), "Test", resolveMaterial = { Material.STONE }
+    )
 
     private fun count(file: String, key: String) =
         File(oraxenFolder, "recipes/$file").readLines().count { it == "$key:" }

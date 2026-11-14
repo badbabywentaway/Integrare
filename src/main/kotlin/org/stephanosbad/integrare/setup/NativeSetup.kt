@@ -28,10 +28,12 @@ import org.bukkit.NamespacedKey
 import org.bukkit.attribute.Attribute
 import org.bukkit.attribute.AttributeModifier
 import org.bukkit.inventory.EquipmentSlotGroup
+import org.bukkit.inventory.FurnaceRecipe
 import org.bukkit.inventory.ItemStack
 import org.bukkit.inventory.RecipeChoice
 import org.bukkit.inventory.ShapedRecipe
 import org.bukkit.inventory.ShapelessRecipe
+import org.bukkit.inventory.StonecuttingRecipe
 import org.stephanosbad.integrare.ProviderKind
 import org.stephanosbad.integrare.catalog.CatalogItem
 import org.stephanosbad.integrare.catalog.CatalogRecipe
@@ -130,6 +132,7 @@ class NativeSetup(
                     provider.registerBlockState(namespacedId, Instrument.valueOf(instrument.bukkitName), note)
                 }
                 is CatalogItem.Item -> provider.registerItemStack(namespacedId, buildItemStack(item))
+                is CatalogItem.Furniture -> provider.registerItemStack(namespacedId, buildFurnitureItemStack(item))
             }
         }
         registerRecipes()
@@ -181,6 +184,20 @@ class NativeSetup(
         return stack
     }
 
+    /** The item players hold before placing [item] as furniture - same shape as a block's held item. */
+    private fun buildFurnitureItemStack(item: CatalogItem.Furniture): ItemStack {
+        val stack = ItemStack(Material.PAPER)
+        stack.editMeta { meta ->
+            meta.displayName(displayName(item))
+            if (item.lore.isNotEmpty()) meta.lore(item.lore.map { miniMessage.deserialize(it) })
+        }
+        stack.setData(
+            DataComponentTypes.CUSTOM_MODEL_DATA,
+            CustomModelData.customModelData().addFloat(customModelData.getValue(item.id).toFloat()).build()
+        )
+        return stack
+    }
+
     private fun registerRecipes() {
         for (recipe in catalog.recipes) {
             if (!recipe.isAvailable(resolveMaterial)) continue
@@ -198,6 +215,14 @@ class NativeSetup(
                         shape(*recipe.shape.toTypedArray())
                         choices.forEach { (char, choice) -> setIngredient(char, choice) }
                     }
+                }
+                is CatalogRecipe.Furnace -> {
+                    val inputChoice = choice(recipe.input) ?: continue
+                    FurnaceRecipe(key, result, inputChoice, recipe.experience, recipe.cookingTime)
+                }
+                is CatalogRecipe.Stonecutting -> {
+                    val inputChoice = choice(recipe.input) ?: continue
+                    StonecuttingRecipe(key, result, inputChoice)
                 }
             }
             Bukkit.addRecipe(bukkitRecipe)
@@ -323,6 +348,17 @@ class NativeSetup(
 }
                     """.trimIndent()
                 )
+                is CatalogItem.Furniture -> write(
+                    file,
+                    """
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "$namespace:${item.texture}"
+  }
+}
+                    """.trimIndent()
+                )
             }
         }
         return slotted.size
@@ -378,6 +414,7 @@ class NativeSetup(
     private fun baseMaterial(item: CatalogItem) = when (item) {
         is CatalogItem.Block -> Material.PAPER
         is CatalogItem.Item -> item.baseMaterialFor(ProviderKind.NATIVE)
+        is CatalogItem.Furniture -> Material.PAPER
     }
 
     private fun itemsByBaseMaterial(): Map<Material, List<CatalogItem>> =

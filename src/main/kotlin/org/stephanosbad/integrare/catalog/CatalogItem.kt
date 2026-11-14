@@ -88,6 +88,20 @@ sealed interface CatalogItem {
         val toolKind: ToolKind? get() = ToolKind.entries.firstOrNull { baseMaterial.name.endsWith("_${it.name}") }
     }
 
+    /**
+     * A placeable furniture piece - a decorative object placed in the world like a
+     * block, but rendered and positioned like an entity rather than occupying a
+     * block space. Covers the simplest case for now: a static, non-seating piece.
+     */
+    data class Furniture(
+        override val id: String,
+        override val displayName: String,
+        override val texture: String,
+        override val lore: List<String> = emptyList(),
+        override val permission: String? = null,
+        override val overrides: Map<ProviderKind, Overrides> = emptyMap()
+    ) : CatalogItem
+
     /** Provider-specific values that take precedence over the item's own. */
     data class Overrides(
         val displayName: String? = null,

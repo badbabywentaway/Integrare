@@ -26,9 +26,15 @@ import org.bukkit.Bukkit
 import org.bukkit.Instrument
 import org.bukkit.Location
 import org.bukkit.Material
+import org.bukkit.NamespacedKey
 import org.bukkit.block.Block
+import org.bukkit.block.BlockFace
+import org.bukkit.entity.Entity
+import org.bukkit.entity.ItemDisplay
 import org.bukkit.inventory.ItemStack
+import org.bukkit.persistence.PersistentDataType
 import org.stephanosbad.integrare.CustomBlockInfo
+import org.stephanosbad.integrare.CustomFurnitureInfo
 import org.stephanosbad.integrare.CustomItemInfo
 import org.stephanosbad.integrare.CustomItemProvider
 import java.io.File
@@ -52,6 +58,13 @@ class NativeItemProvider(private val nbtKey: String = DEFAULT_NBT_KEY) : CustomI
     companion object {
         const val DEFAULT_NBT_KEY = "integrare_item_id"
     }
+
+    /**
+     * Tags a furniture piece's [ItemDisplay] with the namespaced id it was placed from.
+     * Separate from [nbtKey]: that one tags ItemStacks via Item-NBT-API, this tags
+     * entities via Bukkit's own PersistentDataContainer - entity NBT isn't Item-NBT-API's job.
+     */
+    private val furnitureKey = NamespacedKey("integrare", "furniture_id")
 
     private val itemRegistry = mutableMapOf<String, ItemStack>()
     private val placedBlocks = ConcurrentHashMap<Location, CustomBlockInfo>()
@@ -111,6 +124,43 @@ class NativeItemProvider(private val nbtKey: String = DEFAULT_NBT_KEY) : CustomI
     override fun getProviderName(): String = "NativeItems"
 
     override fun isAvailable(): Boolean = true
+
+    /**
+     * Places furniture as an [ItemDisplay] showing the furniture's registered item,
+     * tagged for later identification. Display entities are real Minecraft entities,
+     * so placement survives server restarts without any extra persistence work -
+     * unlike [placedBlocks], which needs it because a plain NoteBlock has no identity
+     * of its own.
+     */
+    override fun placeFurniture(namespacedId: String, location: Location, blockFace: BlockFace): Entity? {
+        val stack = itemRegistry[namespacedId]?.clone() ?: return null
+        val world = location.world ?: return null
+        val display = world.spawn(location, ItemDisplay::class.java)
+        display.setItemStack(stack)
+        display.setRotation(yawFor(blockFace), 0f)
+        display.persistentDataContainer.set(furnitureKey, PersistentDataType.STRING, namespacedId)
+        return display
+    }
+
+    override fun getFurniture(entity: Entity): CustomFurnitureInfo? {
+        val id = entity.persistentDataContainer.get(furnitureKey, PersistentDataType.STRING) ?: return null
+        val parts = id.split(":", limit = 2)
+        return if (parts.size == 2) CustomFurnitureInfo(id, parts[0], parts[1]) else null
+    }
+
+    override fun removeFurniture(entity: Entity): Boolean {
+        if (!entity.persistentDataContainer.has(furnitureKey, PersistentDataType.STRING)) return false
+        entity.remove()
+        return true
+    }
+
+    private fun yawFor(blockFace: BlockFace): Float = when (blockFace) {
+        BlockFace.SOUTH -> 0f
+        BlockFace.WEST -> 90f
+        BlockFace.NORTH -> 180f
+        BlockFace.EAST -> 270f
+        else -> 0f
+    }
 
     fun registerPlacedBlock(location: Location, namespacedId: String) {
         val parts = namespacedId.split(":", limit = 2)

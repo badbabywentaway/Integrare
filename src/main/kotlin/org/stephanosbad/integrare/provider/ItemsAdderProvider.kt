@@ -18,12 +18,17 @@
 package org.stephanosbad.integrare.provider
 
 import dev.lone.itemsadder.api.CustomBlock
+import dev.lone.itemsadder.api.CustomFurniture
 import dev.lone.itemsadder.api.CustomStack
 import org.bukkit.Bukkit
+import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.block.Block
+import org.bukkit.block.BlockFace
+import org.bukkit.entity.Entity
 import org.bukkit.inventory.ItemStack
 import org.stephanosbad.integrare.CustomBlockInfo
+import org.stephanosbad.integrare.CustomFurnitureInfo
 import org.stephanosbad.integrare.CustomItemInfo
 import org.stephanosbad.integrare.CustomItemProvider
 
@@ -89,5 +94,30 @@ class ItemsAdderProvider : CustomItemProvider {
 
     override fun isAvailable(): Boolean {
         return Bukkit.getPluginManager().getPlugin("ItemsAdder") != null
+    }
+
+    /**
+     * Places via [CustomFurniture.spawnPreciseNonSolid] (ItemsAdder's "simple" furniture
+     * API - ArmorStand/ItemFrame-based). [blockFace] is ignored: this API has no facing
+     * parameter, unlike [CustomComplexFurniture][dev.lone.itemsadder.api.CustomComplexFurniture]
+     * (entity-rendered furniture with bones/animations), which isn't wrapped yet.
+     */
+    override fun placeFurniture(namespacedId: String, location: Location, blockFace: BlockFace): Entity? =
+        CustomFurniture.spawnPreciseNonSolid(namespacedId, location)?.entity
+
+    override fun getFurniture(entity: Entity): CustomFurnitureInfo? {
+        val customFurniture = CustomFurniture.byAlreadySpawned(entity) ?: return null
+        val parts = customFurniture.namespacedID.split(":", limit = 2)
+        return if (parts.size == 2) {
+            CustomFurnitureInfo(customFurniture.namespacedID, parts[0], parts[1])
+        } else {
+            null
+        }
+    }
+
+    override fun removeFurniture(entity: Entity): Boolean {
+        val customFurniture = CustomFurniture.byAlreadySpawned(entity) ?: return false
+        customFurniture.remove(false)
+        return true
     }
 }

@@ -17,7 +17,10 @@
  */
 package org.stephanosbad.integrare
 
+import org.bukkit.Location
+import org.bukkit.block.BlockFace
 import org.bukkit.block.Block
+import org.bukkit.entity.Entity
 import org.bukkit.inventory.ItemStack
 
 /**
@@ -73,4 +76,31 @@ interface CustomItemProvider {
      * @return true if the provider is available
      */
     fun isAvailable(): Boolean
+
+    /**
+     * Places a furniture piece by its namespaced ID.
+     *
+     * @param namespacedId The ID in format "namespace:furniture_name"
+     * @param location Where to place it
+     * @param blockFace Facing direction; not every provider honors this (see implementation notes)
+     * @return The entity representing the placed furniture, or null if placement failed
+     *   (unknown ID, no furniture support, etc.)
+     */
+    fun placeFurniture(namespacedId: String, location: Location, blockFace: BlockFace = BlockFace.SOUTH): Entity?
+
+    /**
+     * Identifies placed furniture from one of its entities.
+     *
+     * @param entity The entity to check (what a player clicked or interacted with)
+     * @return CustomFurnitureInfo if [entity] is furniture, null otherwise
+     */
+    fun getFurniture(entity: Entity): CustomFurnitureInfo?
+
+    /**
+     * Removes placed furniture.
+     *
+     * @param entity One of the furniture's entities
+     * @return true if [entity] was furniture and was removed
+     */
+    fun removeFurniture(entity: Entity): Boolean
 }

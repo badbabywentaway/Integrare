@@ -32,9 +32,10 @@ import java.util.logging.Logger
  * Installs an [ItemCatalog] into Oraxen's plugin folder.
  *
  * Writes `items/<namespace>_blocks.yml`, appends recipes to Oraxen's shared
- * `recipes/shaped.yml` and `recipes/shapeless.yml` (keys prefixed with the
- * namespace), and adds models and textures to Oraxen's pack folder. Blocks are
- * note block mechanics numbered by `catalog.slotOrdered(ORAXEN)`.
+ * `recipes/shaped.yml`, `recipes/shapeless.yml`, `recipes/furnace.yml` and
+ * `recipes/stonecutting.yml` (keys prefixed with the namespace), and adds
+ * models and textures to Oraxen's pack folder. Blocks are note block
+ * mechanics numbered by `catalog.slotOrdered(ORAXEN)`.
  *
  * Oraxen item ids have no namespace, so catalog ids must be unique across the
  * server's Oraxen items.
@@ -64,6 +65,8 @@ class OraxenSetup(
     private val itemsFile = File(itemsFolder, "${namespace}_blocks.yml")
     private val shapedFile = File(recipesFolder, "shaped.yml")
     private val shapelessFile = File(recipesFolder, "shapeless.yml")
+    private val furnaceFile = File(recipesFolder, "furnace.yml")
+    private val stonecuttingFile = File(recipesFolder, "stonecutting.yml")
     private val readmeFile = File(itemsFolder, "${pluginName.uppercase()}_README.txt")
 
     private val recipes = catalog.recipes.filter { it.isAvailable(resolveMaterial) }
@@ -133,7 +136,7 @@ class OraxenSetup(
                 readmeFile, pluginName, "Oraxen", catalog,
                 listOf(
                     "items/${itemsFile.name} - item definitions",
-                    "recipes/shaped.yml, recipes/shapeless.yml - recipes prefixed '${namespace}_'",
+                    "recipes/shaped.yml, recipes/shapeless.yml, recipes/furnace.yml, recipes/stonecutting.yml - recipes prefixed '${namespace}_'",
                     "pack/assets/$namespace/textures/ - textures",
                     "pack/assets/minecraft/models/ - block and item models"
                 ),
@@ -174,6 +177,11 @@ class OraxenSetup(
             when (item) {
                 is CatalogItem.Block -> appendBlock(item, variations.getValue(item.id))
                 is CatalogItem.Item -> appendItem(item)
+                // Furniture content generation isn't implemented yet for this provider -
+                // only the runtime place/identify/remove API is (see OraxenProvider). A
+                // CatalogItem.Furniture here produces no item definition, so placeFurniture
+                // will fail for it until this is written.
+                is CatalogItem.Furniture -> continue
             }
             appendLine("")
         }
@@ -247,8 +255,12 @@ class OraxenSetup(
         removeOwnRecipes()
         val shapeless = recipes.filterIsInstance<CatalogRecipe.Shapeless>()
         val shaped = recipes.filterIsInstance<CatalogRecipe.Shaped>()
+        val furnace = recipes.filterIsInstance<CatalogRecipe.Furnace>()
+        val stonecutting = recipes.filterIsInstance<CatalogRecipe.Stonecutting>()
         if (shapeless.isNotEmpty()) shapelessFile.appendText(buildString { shapeless.forEach { appendShapeless(it) } })
         if (shaped.isNotEmpty()) shapedFile.appendText(buildString { shaped.forEach { appendShaped(it) } })
+        if (furnace.isNotEmpty()) furnaceFile.appendText(buildString { furnace.forEach { appendFurnace(it) } })
+        if (stonecutting.isNotEmpty()) stonecuttingFile.appendText(buildString { stonecutting.forEach { appendStonecutting(it) } })
     }
 
     private fun StringBuilder.appendIngredient(ingredient: Ingredient, indent: String) = when (ingredient) {
@@ -287,6 +299,26 @@ class OraxenSetup(
             appendLine("    $key:")
             appendIngredient(ingredient, "      ")
         }
+    }
+
+    private fun StringBuilder.appendFurnace(recipe: CatalogRecipe.Furnace) {
+        appendLine("")
+        appendLine("# $pluginName recipe")
+        appendLine("${recipeKey(recipe)}:")
+        appendLine("  experience: ${recipe.experience}")
+        appendLine("  cookingTime: ${recipe.cookingTime}")
+        appendResult(recipe)
+        appendLine("  input:")
+        appendIngredient(recipe.input, "    ")
+    }
+
+    private fun StringBuilder.appendStonecutting(recipe: CatalogRecipe.Stonecutting) {
+        appendLine("")
+        appendLine("# $pluginName recipe")
+        appendLine("${recipeKey(recipe)}:")
+        appendResult(recipe)
+        appendLine("  input:")
+        appendIngredient(recipe.input, "    ")
     }
 
     // ── Pack ─────────────────────────────────────────────────────────────────
@@ -337,7 +369,7 @@ class OraxenSetup(
             "(\\n# ${Regex.escape(pluginName)} recipe)?\\n(${keys.joinToString("|")}):.*?(?=\\n#|\\n\\w+:|$)",
             RegexOption.DOT_MATCHES_ALL
         )
-        for (file in listOf(shapedFile, shapelessFile)) {
+        for (file in listOf(shapedFile, shapelessFile, furnaceFile, stonecuttingFile)) {
             if (file.exists()) file.writeText(("\n" + file.readText()).replace(recipeBlock, "").removePrefix("\n"))
         }
     }

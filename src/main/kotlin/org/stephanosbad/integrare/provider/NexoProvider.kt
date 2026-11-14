@@ -18,12 +18,18 @@
 package org.stephanosbad.integrare.provider
 
 import com.nexomc.nexo.api.NexoBlocks
+import com.nexomc.nexo.api.NexoFurniture
 import com.nexomc.nexo.api.NexoItems
 import org.bukkit.Bukkit
+import org.bukkit.Location
 import org.bukkit.Material
+import org.bukkit.Rotation
 import org.bukkit.block.Block
+import org.bukkit.block.BlockFace
+import org.bukkit.entity.Entity
 import org.bukkit.inventory.ItemStack
 import org.stephanosbad.integrare.CustomBlockInfo
+import org.stephanosbad.integrare.CustomFurnitureInfo
 import org.stephanosbad.integrare.CustomItemInfo
 import org.stephanosbad.integrare.CustomItemProvider
 
@@ -32,9 +38,10 @@ import org.stephanosbad.integrare.CustomItemProvider
  *
  * Provides integration with the Nexo plugin for custom items and blocks.
  *
- * **NOTE**: This implementation has not been tested with a live Nexo instance
- * as it requires a premium license. The implementation is based on Nexo's
- * public API documentation and follows the same patterns as Oraxen integration.
+ * The item/block lookup and structure-game paths have been live-verified against
+ * a real Nexo server. [placeFurniture]/[getFurniture]/[removeFurniture] have not -
+ * they're written against Nexo's public API (confirmed via its own class files),
+ * same confidence level as the rest of this provider when it was first written.
  *
  * **API Reference**: https://jd.nexomc.com/
  * **Documentation**: https://docs.nexomc.com/
@@ -101,5 +108,25 @@ class NexoProvider : CustomItemProvider {
 
     override fun isAvailable(): Boolean {
         return Bukkit.getPluginManager().getPlugin("Nexo") != null
+    }
+
+    override fun placeFurniture(namespacedId: String, location: Location, blockFace: BlockFace): Entity? {
+        val itemId = if (namespacedId.contains(":")) namespacedId.substringAfter(":") else namespacedId
+        return NexoFurniture.place(itemId, location, Rotation.NONE, blockFace)
+    }
+
+    override fun getFurniture(entity: Entity): CustomFurnitureInfo? {
+        val mechanic = NexoFurniture.furnitureMechanic(entity) ?: return null
+        val furnitureId = mechanic.itemID
+        return CustomFurnitureInfo(
+            namespacedId = "nexo:$furnitureId",
+            namespace = "nexo",
+            furnitureName = furnitureId
+        )
+    }
+
+    override fun removeFurniture(entity: Entity): Boolean {
+        if (NexoFurniture.furnitureMechanic(entity) == null) return false
+        return NexoFurniture.remove(entity)
     }
 }

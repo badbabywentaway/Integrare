@@ -64,6 +64,33 @@ sealed interface CatalogRecipe {
         override val ingredients: List<Ingredient>,
         override val amount: Int = 1
     ) : CatalogRecipe
+
+    /**
+     * A furnace/smoker/blast-furnace/campfire smelting recipe.
+     *
+     * @property experience Experience awarded per smelt
+     * @property cookingTime Ticks to complete (vanilla furnace default: 200)
+     */
+    data class Furnace(
+        override val id: String,
+        override val result: String,
+        val input: Ingredient,
+        override val amount: Int = 1,
+        val experience: Float = 0f,
+        val cookingTime: Int = 200
+    ) : CatalogRecipe {
+        override val ingredients: List<Ingredient> get() = listOf(input)
+    }
+
+    /** A stonecutter recipe - single input, no time or experience. */
+    data class Stonecutting(
+        override val id: String,
+        override val result: String,
+        val input: Ingredient,
+        override val amount: Int = 1
+    ) : CatalogRecipe {
+        override val ingredients: List<Ingredient> get() = listOf(input)
+    }
 }
 
 sealed interface Ingredient {

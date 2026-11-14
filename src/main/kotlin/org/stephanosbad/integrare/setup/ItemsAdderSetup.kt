@@ -203,14 +203,30 @@ class ItemsAdderSetup(
 
     private fun itemsYaml(): String = buildString {
         appendHeader()
-        if (recipes.isNotEmpty()) {
+        val craftingTableRecipes = recipes.filter { it is CatalogRecipe.Shaped || it is CatalogRecipe.Shapeless }
+        val cookingRecipes = recipes.filterIsInstance<CatalogRecipe.Furnace>()
+        // Stonecutting recipes aren't generated here: core ItemsAdder has no stonecutter
+        // recipe type of its own - it requires the separate ItemsAdderAdditions addon,
+        // which most installs won't have. Any CatalogRecipe.Stonecutting is silently
+        // skipped for this provider.
+        if (craftingTableRecipes.isNotEmpty() || cookingRecipes.isNotEmpty()) {
             appendLine("recipes:")
-            appendLine("  crafting_table:")
-            recipes.forEachIndexed { index, recipe ->
-                if (index > 0) appendLine()
-                appendRecipe(recipe)
+            if (craftingTableRecipes.isNotEmpty()) {
+                appendLine("  crafting_table:")
+                craftingTableRecipes.forEachIndexed { index, recipe ->
+                    if (index > 0) appendLine()
+                    appendCraftingTableRecipe(recipe)
+                }
+                appendLine()
             }
-            appendLine()
+            if (cookingRecipes.isNotEmpty()) {
+                appendLine("  cooking:")
+                cookingRecipes.forEachIndexed { index, recipe ->
+                    if (index > 0) appendLine()
+                    appendCookingRecipe(recipe)
+                }
+                appendLine()
+            }
         }
         if (items.isNotEmpty()) {
             appendLine("items:")
@@ -226,7 +242,7 @@ class ItemsAdderSetup(
         is Ingredient.Custom -> "$namespace:${ingredient.id}"
     }
 
-    private fun StringBuilder.appendRecipe(recipe: CatalogRecipe) {
+    private fun StringBuilder.appendCraftingTableRecipe(recipe: CatalogRecipe) {
         appendLine("    ${recipe.id}_recipe:")
         appendLine("      enabled: true")
         when (recipe) {
@@ -243,7 +259,24 @@ class ItemsAdderSetup(
                 appendLine("      ingredients:")
                 recipe.keys.forEach { (key, ingredient) -> appendLine("        $key: ${ingredientText(ingredient)}") }
             }
+            is CatalogRecipe.Furnace, is CatalogRecipe.Stonecutting ->
+                error("appendCraftingTableRecipe called with non-crafting-table recipe ${recipe.id}")
         }
+        appendLine("      result:")
+        appendLine("        item: $namespace:${recipe.result}")
+        appendLine("        amount: ${recipe.amount}")
+    }
+
+    /** Writes a "cooking" recipe (furnace/blast furnace/smoker) - see ItemsAdder's recipes/cooking docs. */
+    private fun StringBuilder.appendCookingRecipe(recipe: CatalogRecipe.Furnace) {
+        appendLine("    ${recipe.id}_recipe:")
+        appendLine("      ingredient:")
+        appendLine("        item: ${ingredientText(recipe.input)}")
+        appendLine("      machines:")
+        appendLine("        - FURNACE")
+        appendLine("        - BLAST_FURNACE")
+        appendLine("      exp: ${recipe.experience}")
+        appendLine("      cook_time: ${recipe.cookingTime}")
         appendLine("      result:")
         appendLine("        item: $namespace:${recipe.result}")
         appendLine("        amount: ${recipe.amount}")

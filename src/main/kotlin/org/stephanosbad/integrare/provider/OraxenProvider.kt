@@ -18,12 +18,18 @@
 package org.stephanosbad.integrare.provider
 
 import io.th0rgal.oraxen.api.OraxenBlocks
+import io.th0rgal.oraxen.api.OraxenFurniture
 import io.th0rgal.oraxen.api.OraxenItems
 import org.bukkit.Bukkit
+import org.bukkit.Location
 import org.bukkit.Material
+import org.bukkit.Rotation
 import org.bukkit.block.Block
+import org.bukkit.block.BlockFace
+import org.bukkit.entity.Entity
 import org.bukkit.inventory.ItemStack
 import org.stephanosbad.integrare.CustomBlockInfo
+import org.stephanosbad.integrare.CustomFurnitureInfo
 import org.stephanosbad.integrare.CustomItemInfo
 import org.stephanosbad.integrare.CustomItemProvider
 
@@ -87,5 +93,25 @@ class OraxenProvider : CustomItemProvider {
 
     override fun isAvailable(): Boolean {
         return Bukkit.getPluginManager().getPlugin("Oraxen") != null
+    }
+
+    override fun placeFurniture(namespacedId: String, location: Location, blockFace: BlockFace): Entity? {
+        val itemId = if (namespacedId.contains(":")) namespacedId.substringAfter(":") else namespacedId
+        return OraxenFurniture.place(itemId, location, Rotation.NONE, blockFace)
+    }
+
+    override fun getFurniture(entity: Entity): CustomFurnitureInfo? {
+        val mechanic = OraxenFurniture.getFurnitureMechanic(entity) ?: return null
+        val furnitureId = mechanic.itemID
+        return CustomFurnitureInfo(
+            namespacedId = "oraxen:$furnitureId",
+            namespace = "oraxen",
+            furnitureName = furnitureId
+        )
+    }
+
+    override fun removeFurniture(entity: Entity): Boolean {
+        if (OraxenFurniture.getFurnitureMechanic(entity) == null) return false
+        return OraxenFurniture.remove(entity, null)
     }
 }
