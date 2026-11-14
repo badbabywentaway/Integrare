@@ -1,0 +1,20 @@
+name: IntegrareDemo
+version: ${version}
+main: org.stephanosbad.integrare.demo.IntegrareDemoPlugin
+api-version: '26.3'
+load: POSTWORLD
+softdepend: [ItemsAdder, Oraxen, Nexo]
+authors: [ StephanosBad ]
+description: Exercises every piece of Integrare's own functionality with simple demo content - not a real plugin.
+
+commands:
+  integraredemo:
+    description: Give a demo item, run provider setup, or place/remove demo furniture
+    usage: /integraredemo <setup|give|furniture> [args]
+    permission: integraredemo.admin
+    aliases: [idemo]
+
+permissions:
+  integraredemo.admin:
+    description: Access to all IntegrareDemo commands
+    default: op
