@@ -71,6 +71,7 @@ class OraxenSetup(
 
     private val recipes = catalog.recipes.filter { it.isAvailable(resolveMaterial) }
     private val blocks = catalog.items.filterIsInstance<CatalogItem.Block>()
+    private val furniture = catalog.items.filterIsInstance<CatalogItem.Furniture>()
 
     override val nextSteps = listOf("Run /oraxen reload all", "Restart the server (recommended)")
 
@@ -177,11 +178,7 @@ class OraxenSetup(
             when (item) {
                 is CatalogItem.Block -> appendBlock(item, variations.getValue(item.id))
                 is CatalogItem.Item -> appendItem(item)
-                // Furniture content generation isn't implemented yet for this provider -
-                // only the runtime place/identify/remove API is (see OraxenProvider). A
-                // CatalogItem.Furniture here produces no item definition, so placeFurniture
-                // will fail for it until this is written.
-                is CatalogItem.Furniture -> continue
+                is CatalogItem.Furniture -> appendFurniture(item)
             }
             appendLine("")
         }
@@ -208,6 +205,36 @@ class OraxenSetup(
         }
         appendLine("        loots:")
         appendLine("          - { oraxen_item: ${block.id}, probability: 1.0 }")
+    }
+
+    /**
+     * Writes a static, non-seating furniture piece. Schema confirmed against Oraxen's own
+     * bundled `items/furniture.yml` example (DISPLAY_ENTITY type, barrier, limited_placing);
+     * not yet live-tested.
+     */
+    private fun StringBuilder.appendFurniture(item: CatalogItem.Furniture) {
+        appendLine("${item.id}:")
+        appendLine("  displayname: ${yamlQuote(item.displayNameFor(ProviderKind.ORAXEN))}")
+        appendLine("  material: PAPER")
+        if (item.lore.isNotEmpty()) {
+            appendLine("  lore:")
+            item.lore.forEach { appendLine("    - ${yamlQuote(it)}") }
+        }
+        appendLine("  Pack:")
+        appendLine("    generate_model: false")
+        appendLine("    model: item/${item.id}")
+        appendLine("  Mechanics:")
+        appendLine("    furniture:")
+        appendLine("      type: DISPLAY_ENTITY")
+        appendLine("      barrier: true")
+        appendLine("      limited_placing:")
+        appendLine("        roof: false")
+        appendLine("        floor: true")
+        appendLine("        wall: false")
+        appendLine("      drop:")
+        appendLine("        silktouch: false")
+        appendLine("        loots:")
+        appendLine("          - { oraxen_item: ${item.id}, probability: 1.0 }")
     }
 
     private fun StringBuilder.appendItem(item: CatalogItem.Item) {
@@ -347,7 +374,17 @@ class OraxenSetup(
 }
             """.trimIndent())
         }
-        return blocks.size * 2
+        for (piece in furniture) {
+            File(itemModels, "${piece.id}.json").writeText("""
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "$namespace:${piece.texture}"
+  }
+}
+            """.trimIndent())
+        }
+        return blocks.size * 2 + furniture.size
     }
 
     /** Removes everything a previous [install] wrote, leaving other Oraxen content alone. */
@@ -358,6 +395,9 @@ class OraxenSetup(
         for (block in blocks) {
             File(packFolder, "assets/minecraft/models/block/${block.id}.json").delete()
             File(packFolder, "assets/minecraft/models/item/${block.id}.json").delete()
+        }
+        for (piece in furniture) {
+            File(packFolder, "assets/minecraft/models/item/${piece.id}.json").delete()
         }
         removeOwnRecipes()
     }

@@ -54,10 +54,12 @@ class ItemsAdderSetup(
     private val configsFolder = File(contentFolder, "configs")
     private val blocksFile = File(configsFolder, "blocks.yml")
     private val itemsFile = File(configsFolder, "items.yml")
+    private val furnitureFile = File(configsFolder, "furniture.yml")
     private val itemsPacksFile = File(itemsAdderFolder, "data/items_packs.yml")
 
     private val blocks = catalog.items.filterIsInstance<CatalogItem.Block>()
     private val items = catalog.items.filterIsInstance<CatalogItem.Item>()
+    private val furniture = catalog.items.filterIsInstance<CatalogItem.Furniture>()
     private val recipes = catalog.recipes.filter { it.isAvailable(resolveMaterial) }
 
     private val miniMessage = MiniMessage.miniMessage()
@@ -65,7 +67,7 @@ class ItemsAdderSetup(
 
     override val nextSteps = listOf("Run /iazip to generate the resource pack", "Restart the server")
 
-    override fun isAlreadySetup(): Boolean = blocksFile.exists() || itemsFile.exists()
+    override fun isAlreadySetup(): Boolean = blocksFile.exists() || itemsFile.exists() || furnitureFile.exists()
 
     override fun install(force: Boolean): SetupResult {
         val messages = mutableListOf<String>()
@@ -113,6 +115,11 @@ class ItemsAdderSetup(
                 itemsFile.writeText(itemsYaml())
                 messages.add("  ✓ ${items.size} items, ${recipes.size} recipes")
             }
+            if (furniture.isNotEmpty()) {
+                messages.add("Generating furniture.yml...")
+                furnitureFile.writeText(furnitureYaml())
+                messages.add("  ✓ ${furniture.size} furniture pieces")
+            }
 
             messages.add("Copying texture files...")
             val textures = catalog.items.count { item ->
@@ -127,6 +134,7 @@ class ItemsAdderSetup(
                 listOf(
                     "configs/blocks.yml - block definitions",
                     "configs/items.yml - item and recipe definitions",
+                    "configs/furniture.yml - furniture definitions",
                     "resourcepack/assets/$namespace/textures/ - textures"
                 ),
                 nextSteps
@@ -200,6 +208,34 @@ class ItemsAdderSetup(
     private fun breakTools(block: CatalogItem.Block): List<String> =
         block.breakTools.map { "_${it.name}" }.sorted() +
             items.filter { it.toolKind in block.breakTools }.map { "$namespace:${it.id}" }.sorted()
+
+    private fun furnitureYaml(): String = buildString {
+        appendHeader()
+        appendLine("items:")
+        for (piece in furniture) {
+            appendFurniture(piece)
+            appendLine()
+        }
+    }
+
+    /**
+     * Writes a static, non-seating, non-solid furniture piece as an item_display.
+     * Schema reconstructed from ItemsAdder's own docs (wiki.itemsadder.com/adding-content/furnitures) -
+     * key names/nesting corroborated across multiple fetches, but not copied from a verbatim
+     * example the way Oraxen/Nexo's furniture schema was; not yet live-tested either way.
+     */
+    private fun StringBuilder.appendFurniture(item: CatalogItem.Furniture) {
+        appendCommon(item)
+        appendResource(Material.PAPER, item.texture)
+        appendLine("    behaviours:")
+        appendLine("      furniture:")
+        appendLine("        entity: item_display")
+        appendLine("        solid: false")
+        appendLine("        placeable_on:")
+        appendLine("          floor: true")
+        appendLine("          ceiling: false")
+        appendLine("          walls: false")
+    }
 
     private fun itemsYaml(): String = buildString {
         appendHeader()

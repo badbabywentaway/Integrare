@@ -61,6 +61,7 @@ class NexoSetup(
 
     private val recipes = catalog.recipes.filter { it.isAvailable(resolveMaterial) }
     private val blocks = catalog.items.filterIsInstance<CatalogItem.Block>()
+    private val furniture = catalog.items.filterIsInstance<CatalogItem.Furniture>()
 
     override val nextSteps = listOf(
         "Run /nexo reload all",
@@ -113,6 +114,12 @@ class NexoSetup(
             writeBlockModels()
             messages.add("  ✓ Generated ${blocks.size} block models")
 
+            if (furniture.isNotEmpty()) {
+                messages.add("Generating furniture models...")
+                writeFurnitureModels()
+                messages.add("  ✓ Generated ${furniture.size} furniture models")
+            }
+
             messages.add("Generating recipes...")
             writeRecipes()
             messages.add("  ✓ Recipes configuration created (${recipes.size} recipes)")
@@ -157,11 +164,7 @@ class NexoSetup(
             when (item) {
                 is CatalogItem.Block -> appendBlock(item)
                 is CatalogItem.Item -> appendItem(item)
-                // Furniture content generation isn't implemented yet for this provider -
-                // only the runtime place/identify/remove API is (see NexoProvider). A
-                // CatalogItem.Furniture here produces no item definition, so placeFurniture
-                // will fail for it until this is written.
-                is CatalogItem.Furniture -> continue
+                is CatalogItem.Furniture -> appendFurniture(item)
             }
             appendLine()
         }
@@ -219,6 +222,35 @@ class NexoSetup(
         appendLine("      key: $namespace:${item.id}_$attribute")
     }
 
+    /**
+     * Writes a static, non-seating furniture piece. Schema confirmed against Nexo's own
+     * bundled `items/nexo_defaults/nexo_furniture.yml` example (explicit Pack.model reference,
+     * hitbox.barriers, limited_placing); not yet live-tested. Unlike regular items (which use
+     * generate_model: true successfully - see appendItem), furniture's bundled examples all use
+     * an explicit model reference, so this does the same via writeFurnitureModels() rather than
+     * assuming generate_model works the same way under Mechanics.furniture.
+     */
+    private fun StringBuilder.appendFurniture(item: CatalogItem.Furniture) {
+        appendLine("${item.id}:")
+        appendLine("  itemname: ${yamlQuote(item.displayNameFor(ProviderKind.NEXO))}")
+        appendLine("  material: PAPER")
+        if (item.lore.isNotEmpty()) {
+            appendLine("  lore:")
+            item.lore.forEach { appendLine("    - ${yamlQuote(it)}") }
+        }
+        appendLine("  Pack:")
+        appendLine("    model: $namespace:item/${item.id}")
+        appendLine("  Mechanics:")
+        appendLine("    furniture:")
+        appendLine("      limited_placing:")
+        appendLine("        roof: false")
+        appendLine("        floor: true")
+        appendLine("        wall: false")
+        appendLine("      hitbox:")
+        appendLine("        barriers:")
+        appendLine("        - 0,0,0")
+    }
+
     private fun writeBlockModels() {
         for (block in blocks) {
             val file = File(assetsFolder, "models/block/${modelPath(block)}.json")
@@ -228,6 +260,21 @@ class NexoSetup(
                   "parent": "block/cube_all",
                   "textures": {
                     "all": "$namespace:${block.texture}"
+                  }
+                }
+            """.trimIndent())
+        }
+    }
+
+    private fun writeFurnitureModels() {
+        for (piece in furniture) {
+            val file = File(assetsFolder, "models/item/${piece.id}.json")
+            file.parentFile.mkdirs()
+            file.writeText("""
+                {
+                  "parent": "item/generated",
+                  "textures": {
+                    "layer0": "$namespace:${piece.texture}"
                   }
                 }
             """.trimIndent())
