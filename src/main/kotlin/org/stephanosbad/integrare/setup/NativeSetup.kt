@@ -152,7 +152,14 @@ class NativeSetup(
             DataComponentTypes.CUSTOM_MODEL_DATA,
             CustomModelData.customModelData().addFloat(customModelData.getValue(item.id).toFloat()).build()
         )
-        item.durability?.let { stack.setData(DataComponentTypes.MAX_DAMAGE, it) }
+        // Oraxen/Nexo/ItemsAdder all hide a damageable base material's vanilla wear bar
+        // unless durability is explicitly configured; a raw vanilla ItemStack doesn't do
+        // that on its own, so it has to be set explicitly here to match.
+        if (item.durability != null) {
+            stack.setData(DataComponentTypes.MAX_DAMAGE, item.durability)
+        } else {
+            stack.setData(DataComponentTypes.UNBREAKABLE)
+        }
         // Copy the mining rules of the tier's vanilla tool, e.g. IRON_PICKAXE, so speed
         // and harvest level match that tier rather than the base material's
         val tier = item.miningTier

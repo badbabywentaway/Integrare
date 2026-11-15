@@ -328,8 +328,14 @@ class NexoSetup(
     private fun StringBuilder.appendShaped(recipe: CatalogRecipe.Shaped) {
         appendResult(recipe)
         for ((key, ingredient) in recipe.keys) {
+            // Not recipe.count(key): Nexo's loader treats an ingredient's "amount" > 1 on
+            // a SHAPED recipe as "this many in one matching cell" (confirmed by decompiling
+            // RecipeLoader.recipeIngredient - it switches to a stack-size-checking predicate
+            // choice), not "this key occupies this many cells in the pattern". A letter that
+            // repeats across the shape already means one matching cell per occurrence, each
+            // needing exactly 1 - same as Bukkit's own ShapedRecipe.setIngredient(char, ...).
             appendLine("    $key:")
-            appendLine("      amount: ${recipe.count(key)}")
+            appendLine("      amount: 1")
             appendIngredient(ingredient)
         }
         appendLine("  shape:")

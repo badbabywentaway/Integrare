@@ -60,7 +60,25 @@ class ItemsAdderSetup(
     private val blocks = catalog.items.filterIsInstance<CatalogItem.Block>()
     private val items = catalog.items.filterIsInstance<CatalogItem.Item>()
     private val furniture = catalog.items.filterIsInstance<CatalogItem.Furniture>()
-    private val recipes = catalog.recipes.filter { it.isAvailable(resolveMaterial) }
+    private val recipes = catalog.recipes.filter { it.isAvailable(resolveMaterial) }.filter { recipe ->
+        // ItemsAdder's crafting_table ingredient matching only ever consumes 1 per
+        // matched grid cell (confirmed by decompiling its recipe-loading and
+        // crafting-match code - no "amount" is read for an input ingredient, and
+        // listing the same material under two slot keys is rejected outright as
+        // "Duplicate ingredient"), so a shapeless recipe needing more than one of
+        // the same ingredient has no representable syntax on this provider.
+        if (recipe is CatalogRecipe.Shapeless) {
+            val duplicate = recipe.ingredients.groupingBy { ingredientText(it) }.eachCount().any { it.value > 1 }
+            if (duplicate) {
+                logger.warning(
+                    "Recipe '${recipe.id}' needs more than one of the same ingredient in a single " +
+                        "slot - ItemsAdder's crafting_table recipes can't express that. Skipped."
+                )
+                return@filter false
+            }
+        }
+        true
+    }
 
     private val miniMessage = MiniMessage.miniMessage()
     private val legacy = LegacyComponentSerializer.legacyAmpersand()
@@ -285,6 +303,8 @@ class ItemsAdderSetup(
             is CatalogRecipe.Shapeless -> {
                 appendLine("      shapeless: true")
                 appendLine("      ingredients:")
+                // Recipes needing more than one of the same ingredient never reach here -
+                // see the filter on `recipes` above.
                 recipe.ingredients.forEachIndexed { index, ingredient ->
                     appendLine("        ${'A' + index}: ${ingredientText(ingredient)}")
                 }

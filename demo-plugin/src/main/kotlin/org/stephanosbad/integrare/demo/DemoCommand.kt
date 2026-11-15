@@ -79,21 +79,41 @@ class DemoCommand(
                 }
             }
             "remove" -> {
-                val target = sender.getTargetEntity(10)
+                // Display entities (ItemDisplay/BlockDisplay/TextDisplay - what furniture
+                // placement is commonly built on) are hardcoded non-pickable in vanilla, so
+                // no Bukkit raytrace (getTargetEntity, rayTraceEntities) can ever hit one.
+                // Sweep along the look direction and check for nearby furniture instead.
+                val target = findFurnitureInSight(sender, provider)
                 if (target == null) {
-                    sender.sendMessage(Component.text("No entity in sight.").color(NamedTextColor.YELLOW))
+                    sender.sendMessage(Component.text("No furniture in sight.").color(NamedTextColor.YELLOW))
                     return
                 }
-                val info = provider.getFurniture(target)
-                if (info == null) {
-                    sender.sendMessage(Component.text("That's not furniture.").color(NamedTextColor.YELLOW))
-                    return
-                }
+                val info = provider.getFurniture(target)!!
                 provider.removeFurniture(target)
                 sender.sendMessage(Component.text("Removed ${info.furnitureName}.").color(NamedTextColor.GREEN))
             }
             else -> sender.sendMessage(Component.text("Usage: /integraredemo furniture <place|remove>").color(NamedTextColor.RED))
         }
+    }
+
+    /** Steps along [player]'s look direction, checking for furniture within a small radius at each point. */
+    private fun findFurnitureInSight(
+        player: Player,
+        provider: org.stephanosbad.integrare.CustomItemProvider,
+        maxDistance: Double = 10.0,
+        step: Double = 0.5,
+        radius: Double = 0.75
+    ): org.bukkit.entity.Entity? {
+        val eye = player.eyeLocation
+        val direction = eye.direction
+        var distance = 0.0
+        while (distance <= maxDistance) {
+            val point = eye.clone().add(direction.clone().multiply(distance))
+            val nearby = point.world?.getNearbyEntities(point, radius, radius, radius) ?: emptyList()
+            nearby.firstOrNull { it != player && provider.getFurniture(it) != null }?.let { return it }
+            distance += step
+        }
+        return null
     }
 
     private fun yawToBlockFace(yaw: Float): BlockFace {

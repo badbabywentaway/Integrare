@@ -55,11 +55,14 @@ object DemoCatalog {
                 result = "ruby_block",
                 ingredients = List(4) { Ingredient.Vanilla("REDSTONE") }
             ),
-            // Furnace: smelt redstone ore into a ruby block
+            // Furnace: smelt rotten flesh into a ruby block. Deliberately NOT an input
+            // with its own vanilla furnace recipe (e.g. REDSTONE_ORE -> REDSTONE) -
+            // that collides with the vanilla recipe for the same input, and vanilla
+            // wins rather than being overridden.
             CatalogRecipe.Furnace(
                 id = "ruby_block_smelt",
                 result = "ruby_block",
-                input = Ingredient.Vanilla("REDSTONE_ORE"),
+                input = Ingredient.Vanilla("ROTTEN_FLESH"),
                 experience = 1.0f,
                 cookingTime = 200
             ),

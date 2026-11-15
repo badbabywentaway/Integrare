@@ -55,42 +55,52 @@ class CustomBlockHitListener(
 ) : Listener {
 
     // key -> tick added. Guards against a provider firing more than one of
-    // Interact/Damage/Break for the same physical hit; expires on its own so a
-    // deferred onHit completing a tick or two later doesn't need to release it.
+    // Interact/Damage/Break for the same physical hit. BlockBreakEvent always clears
+    // its own entry on arrival (see tryHandle) since it's the one unambiguous end of
+    // that hit, however long mining took - GUARD_TICKS here is only a safety net for
+    // mining that's abandoned without ever breaking, so a key doesn't linger forever.
     private val processing = mutableMapOf<String, Int>()
 
     @EventHandler(priority = EventPriority.LOWEST)
     fun onInteract(event: PlayerInteractEvent) {
         if (event.action != Action.LEFT_CLICK_BLOCK) return
         val block = event.clickedBlock ?: return
-        if (tryHandle(block, event.player)) event.isCancelled = true
+        if (tryHandle(block, event.player, isBreak = false)) event.isCancelled = true
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
     fun onDamage(event: BlockDamageEvent) {
-        if (tryHandle(event.block, event.player)) event.isCancelled = true
+        if (tryHandle(event.block, event.player, isBreak = false)) event.isCancelled = true
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
     fun onBreak(event: BlockBreakEvent) {
-        if (tryHandle(event.block, event.player)) event.isCancelled = true
+        if (tryHandle(event.block, event.player, isBreak = true)) event.isCancelled = true
     }
 
-    private fun tryHandle(block: Block, player: Player): Boolean {
+    private fun tryHandle(block: Block, player: Player, isBreak: Boolean): Boolean {
         val info = provider.getCustomBlock(block) ?: return false
         if (!matches(info)) return false
 
         val tick = Bukkit.getCurrentTick()
         val key = "${block.world.name}:${block.x}:${block.y}:${block.z}"
         processing.entries.removeIf { tick - it.value > GUARD_TICKS }
-        if (key in processing) return false
-        processing[key] = tick
+
+        val alreadyDispatched = key in processing
+        if (isBreak) {
+            // The hit is over now regardless of which event triggered onHit for it -
+            // clear so a later, genuinely new hit at this spot isn't suppressed.
+            processing.remove(key)
+        } else if (!alreadyDispatched) {
+            processing[key] = tick
+        }
+        if (alreadyDispatched) return false
 
         return onHit(block, player)
     }
 
     private companion object {
-        /** How long a hit guards its location against a second event for the same click. */
-        const val GUARD_TICKS = 20
+        /** Safety-net only (see [processing]) - generous enough to outlast any realistic mining time. */
+        const val GUARD_TICKS = 20 * 60 * 10
     }
 }

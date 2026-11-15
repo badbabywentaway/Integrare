@@ -96,7 +96,7 @@ class IntegrareDemoPlugin : JavaPlugin() {
                     provider = provider,
                     matches = { it.blockName == "ruby_block" },
                     onHit = { _, player ->
-                        player.sendMessage(Component.text("You broke a Ruby Block!").color(NamedTextColor.RED))
+                        player.sendMessage(Component.text("You hit the Ruby Block!").color(NamedTextColor.RED))
                         false
                     }
                 ),

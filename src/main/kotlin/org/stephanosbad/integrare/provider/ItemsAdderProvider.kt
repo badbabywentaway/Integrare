@@ -105,8 +105,21 @@ class ItemsAdderProvider : CustomItemProvider {
     override fun placeFurniture(namespacedId: String, location: Location, blockFace: BlockFace): Entity? =
         CustomFurniture.spawnPreciseNonSolid(namespacedId, location)?.entity
 
+    /**
+     * [CustomFurniture.byAlreadySpawned] throws for entity types it doesn't recognize
+     * as furniture at all (observed: "Entity 'PLAYER' can't be a furniture!") rather
+     * than returning null for them like it does for an eligible-but-not-furniture
+     * entity - callers checking an arbitrary entity need both treated the same way.
+     */
+    private fun byAlreadySpawnedOrNull(entity: Entity): CustomFurniture? =
+        try {
+            CustomFurniture.byAlreadySpawned(entity)
+        } catch (e: RuntimeException) {
+            null
+        }
+
     override fun getFurniture(entity: Entity): CustomFurnitureInfo? {
-        val customFurniture = CustomFurniture.byAlreadySpawned(entity) ?: return null
+        val customFurniture = byAlreadySpawnedOrNull(entity) ?: return null
         val parts = customFurniture.namespacedID.split(":", limit = 2)
         return if (parts.size == 2) {
             CustomFurnitureInfo(customFurniture.namespacedID, parts[0], parts[1])
@@ -116,7 +129,7 @@ class ItemsAdderProvider : CustomItemProvider {
     }
 
     override fun removeFurniture(entity: Entity): Boolean {
-        val customFurniture = CustomFurniture.byAlreadySpawned(entity) ?: return false
+        val customFurniture = byAlreadySpawnedOrNull(entity) ?: return false
         customFurniture.remove(false)
         return true
     }

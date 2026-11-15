@@ -257,13 +257,12 @@ class OraxenSetup(
             appendLine("      value: $it")
         }
         if (item.attackDamage != null && item.attackSpeed != null) {
+            // Schema confirmed against Oraxen's own bundled items/weapons.yml example: a
+            // list of inline maps, keyed by the current Bukkit Attribute enum name (no
+            // "GENERIC_" prefix - that was removed from org.bukkit.attribute.Attribute).
             appendLine("  AttributeModifiers:")
-            appendLine("    GENERIC_ATTACK_DAMAGE:")
-            appendLine("      amount: ${formatWhole(item.attackDamage)}")
-            appendLine("      slot: HAND")
-            appendLine("    GENERIC_ATTACK_SPEED:")
-            appendLine("      amount: ${item.attackSpeed}")
-            appendLine("      slot: HAND")
+            appendLine("    - { attribute: ATTACK_DAMAGE, amount: ${formatWhole(item.attackDamage)}, operation: 0, slot: HAND }")
+            appendLine("    - { attribute: ATTACK_SPEED, amount: ${item.attackSpeed}, operation: 0, slot: HAND }")
         }
         if (item.miningTier != null && item.toolKind != null) {
             appendLine("  Components:")
