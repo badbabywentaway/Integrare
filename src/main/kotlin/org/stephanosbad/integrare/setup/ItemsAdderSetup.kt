@@ -65,6 +65,7 @@ class ItemsAdderSetup(
     private val blocks = catalog.items.filterIsInstance<CatalogItem.Block>()
     private val items = catalog.items.filterIsInstance<CatalogItem.Item>()
     private val furniture = catalog.items.filterIsInstance<CatalogItem.Furniture>()
+    private val armor = catalog.items.filterIsInstance<CatalogItem.Armor>()
     private val recipes = catalog.recipes.filter { it.isAvailable(resolveMaterial) }.filter { recipe ->
         // ItemsAdder's crafting_table ingredient matching only ever consumes 1 per
         // matched grid cell (confirmed by decompiling its recipe-loading and
@@ -133,10 +134,10 @@ class ItemsAdderSetup(
                 blocksFile.writeText(blocksYaml())
                 messages.add("  ✓ ${blocks.size} blocks")
             }
-            if (items.isNotEmpty() || recipes.isNotEmpty()) {
+            if (items.isNotEmpty() || armor.isNotEmpty() || recipes.isNotEmpty()) {
                 messages.add("Generating items.yml...")
                 itemsFile.writeText(itemsYaml())
-                messages.add("  ✓ ${items.size} items, ${recipes.size} recipes")
+                messages.add("  ✓ ${items.size} items, ${armor.size} armor, ${recipes.size} recipes")
             }
             if (furniture.isNotEmpty()) {
                 messages.add("Generating furniture.yml...")
@@ -378,11 +379,16 @@ class ItemsAdderSetup(
                 appendLine()
             }
         }
-        if (items.isNotEmpty()) {
+        if (items.isNotEmpty() || armor.isNotEmpty()) {
             appendLine("items:")
-            items.forEachIndexed { index, item ->
+            val entries: List<CatalogItem> = items + armor
+            entries.forEachIndexed { index, item ->
                 if (index > 0) appendLine()
-                appendItem(item)
+                when (item) {
+                    is CatalogItem.Item -> appendItem(item)
+                    is CatalogItem.Armor -> appendArmor(item)
+                    else -> error("itemsYaml entries only ever contain Item or Armor")
+                }
             }
         }
     }
@@ -451,6 +457,55 @@ class ItemsAdderSetup(
             appendLine("      mainhand:")
             appendLine("        attackDamage: ${formatWhole(item.attackDamage)}")
             appendLine("        attackSpeed: ${item.attackSpeed}")
+        }
+    }
+
+    /**
+     * Writes a wearable armor piece. The worn-body appearance is [item]'s own
+     * [baseMaterial][CatalogItem.Armor.baseMaterialFor]'s vanilla look - only the
+     * inventory icon and optional stat bonuses are custom (no custom worn skin yet).
+     * `equipment.slot_attribute_modifiers` confirmed by decompiling the installed
+     * ItemsAdder 5.0.0-beta-5 jar (its item loader reads `equipment.slot` and
+     * `equipment.slot_attribute_modifiers.<armor|attack_damage|knockback_resistance>`
+     * directly, lowercase snake_case) - `armor_toughness` wasn't found in that jar's
+     * attribute-bounds table, so it may be silently ignored there; keeping it written
+     * anyway since it's harmless if so.
+     *
+     * Uses `graphics.texture` for the icon rather than [appendResource]'s `resource:`
+     * block (which [appendItem] uses) - live-tested and confirmed: an item carrying an
+     * `equipment:` section generates NO icon override at all from `resource:` (checked
+     * the generated pack zip directly: zero files for the armor's base material, versus
+     * five for a plain item's). `graphics.texture` is what ItemsAdder's own armor docs
+     * show for this exact case.
+     *
+     * Known limitation, accepted as-is: with no `graphics.model`/`CustomArmor` layer
+     * skin defined (out of scope for now, see [CatalogItem.Armor]'s own doc), ItemsAdder
+     * renders the worn appearance as the flat icon floating near the slot rather than a
+     * normal-looking helmet - confirmed live, and nothing in the decompiled equipment
+     * loader (`slot`, `id`, `camera_overlay_id`, `sound`, `allowed_entities`, `glider`,
+     * `dispensable`, `swappable`, `damage_on_hurt`, `slot_attribute_modifiers` - the full
+     * key list) offers a way to suppress it. The stat bonuses and inventory icon both
+     * work correctly regardless.
+     */
+    private fun StringBuilder.appendArmor(item: CatalogItem.Armor) {
+        appendCommon(item)
+        appendLine("    material: ${item.baseMaterialFor(ProviderKind.ITEMSADDER).name}")
+        appendLine("    graphics:")
+        appendLine("      texture: ${item.texture}")
+        item.durability?.let {
+            appendLine("    durability:")
+            appendLine("      max_custom_durability: $it")
+        }
+        appendLine("    equipment:")
+        appendLine("      slot: ${item.slot.name}")
+        val stats = buildList {
+            item.armor?.let { add("armor" to formatWhole(it)) }
+            item.armorToughness?.let { add("armor_toughness" to formatWhole(it)) }
+            item.knockbackResistance?.let { add("knockback_resistance" to it.toString()) }
+        }
+        if (stats.isNotEmpty()) {
+            appendLine("      slot_attribute_modifiers:")
+            stats.forEach { (attribute, amount) -> appendLine("        $attribute: $amount") }
         }
     }
 

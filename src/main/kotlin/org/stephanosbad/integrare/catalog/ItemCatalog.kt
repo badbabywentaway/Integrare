@@ -17,6 +17,7 @@
  */
 package org.stephanosbad.integrare.catalog
 
+import org.bukkit.inventory.EquipmentSlot
 import org.stephanosbad.integrare.ProviderKind
 
 /**
@@ -59,6 +60,10 @@ data class ItemCatalog(
             val referenced = recipe.ingredients.filterIsInstance<Ingredient.Custom>().map { it.id } + recipe.result
             val unknown = referenced.filterNot { it in byId }
             require(unknown.isEmpty()) { "Recipe ${recipe.id} references unknown items $unknown" }
+        }
+        val armorSlots = setOf(EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET)
+        for (item in items.filterIsInstance<CatalogItem.Armor>()) {
+            require(item.slot in armorSlots) { "Armor '${item.id}' has slot ${item.slot} - must be HEAD, CHEST, LEGS or FEET" }
         }
     }
 

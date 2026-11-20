@@ -5,6 +5,7 @@
 package org.stephanosbad.integrare.demo
 
 import org.bukkit.Material
+import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.plugin.Plugin
 import org.stephanosbad.integrare.catalog.CatalogItem
 import org.stephanosbad.integrare.catalog.CatalogRecipe
@@ -39,6 +40,16 @@ object DemoCatalog {
             id = "ruby_chair",
             displayName = "<red>Ruby Chair",
             texture = "item/ruby_chair"
+        )
+        // Armor: supported on ItemsAdder/Oraxen/Nexo only for now - see CatalogItem.Armor.
+        val helmet = CatalogItem.Armor(
+            id = "ruby_helmet",
+            displayName = "<red>Ruby Helmet",
+            texture = "item/ruby_helmet",
+            slot = EquipmentSlot.HEAD,
+            baseMaterial = Material.IRON_HELMET,
+            armor = 4.0,
+            armorToughness = 1.0
         )
 
         val recipes = listOf(
@@ -77,7 +88,7 @@ object DemoCatalog {
 
         return ItemCatalog(
             namespace = NAMESPACE,
-            items = listOf(block, sword, chair),
+            items = listOf(block, sword, chair, helmet),
             recipes = recipes,
             textures = TextureSource.fromPluginJar(plugin, fullRoot = "pack/assets/minecraft/textures")
         )

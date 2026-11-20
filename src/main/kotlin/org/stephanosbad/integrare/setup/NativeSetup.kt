@@ -97,7 +97,18 @@ class NativeSetup(
     private val packMeta = File(packRoot, "pack.mcmeta")
     private val miniMessage = MiniMessage.miniMessage()
 
-    private val slotted: List<CatalogItem> = catalog.slotOrdered(ProviderKind.NATIVE)
+    // Armor isn't supported on this provider yet (ItemsAdder/Oraxen/Nexo only, for now) -
+    // filtered out here so nothing downstream (registration, model/CMD assignment) ever
+    // sees one. The `is CatalogItem.Armor` branches below only exist to satisfy Kotlin's
+    // sealed-class exhaustiveness check and are unreachable in practice.
+    private val slotted: List<CatalogItem> = catalog.slotOrdered(ProviderKind.NATIVE).filter { item ->
+        if (item is CatalogItem.Armor) {
+            logger.warning("Armor '${item.id}' isn't supported on the native provider yet. Skipped.")
+            false
+        } else {
+            true
+        }
+    }
     private val blocks: List<CatalogItem.Block> = slotted.filterIsInstance<CatalogItem.Block>()
 
     private val customModelData: Map<String, Int> =
@@ -133,6 +144,7 @@ class NativeSetup(
                 }
                 is CatalogItem.Item -> provider.registerItemStack(namespacedId, buildItemStack(item))
                 is CatalogItem.Furniture -> provider.registerItemStack(namespacedId, buildFurnitureItemStack(item))
+                is CatalogItem.Armor -> Unit // unreachable - filtered out of `slotted`
             }
         }
         registerRecipes()
@@ -366,6 +378,7 @@ class NativeSetup(
 }
                     """.trimIndent()
                 )
+                is CatalogItem.Armor -> Unit // unreachable - filtered out of `slotted`
             }
         }
         return slotted.size
@@ -422,6 +435,7 @@ class NativeSetup(
         is CatalogItem.Block -> Material.PAPER
         is CatalogItem.Item -> item.baseMaterialFor(ProviderKind.NATIVE)
         is CatalogItem.Furniture -> Material.PAPER
+        is CatalogItem.Armor -> Material.PAPER // unreachable - filtered out of `slotted`
     }
 
     private fun itemsByBaseMaterial(): Map<Material, List<CatalogItem>> =

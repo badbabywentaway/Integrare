@@ -179,6 +179,7 @@ class OraxenSetup(
                 is CatalogItem.Block -> appendBlock(item, variations.getValue(item.id))
                 is CatalogItem.Item -> appendItem(item)
                 is CatalogItem.Furniture -> appendFurniture(item)
+                is CatalogItem.Armor -> appendArmor(item)
             }
             appendLine("")
         }
@@ -209,8 +210,12 @@ class OraxenSetup(
 
     /**
      * Writes a static, non-seating furniture piece. Schema confirmed against Oraxen's own
-     * bundled `items/furniture.yml` example (DISPLAY_ENTITY type, barrier, limited_placing);
-     * not yet live-tested.
+     * bundled `items/furniture.yml` example (DISPLAY_ENTITY type, barrier, limited_placing) -
+     * live-tested and found that without `hitboxes`/`display_entity_properties`,
+     * `OraxenFurniture.getFurnitureMechanic(id)` returns null (no mechanic ever registers,
+     * `/integraredemo furniture place` fails silently) even though the item itself loads
+     * fine. Every DISPLAY_ENTITY example in that bundled file has both, so they're added
+     * here even for a plain non-seating piece.
      */
     private fun StringBuilder.appendFurniture(item: CatalogItem.Furniture) {
         appendLine("${item.id}:")
@@ -226,6 +231,10 @@ class OraxenSetup(
         appendLine("  Mechanics:")
         appendLine("    furniture:")
         appendLine("      type: DISPLAY_ENTITY")
+        appendLine("      hitboxes:")
+        appendLine("        - 0,0,0 1.0,1.0")
+        appendLine("      display_entity_properties:")
+        appendLine("        display_transform: FIXED")
         appendLine("      barrier: true")
         appendLine("      limited_placing:")
         appendLine("        roof: false")
@@ -257,17 +266,63 @@ class OraxenSetup(
             appendLine("      value: $it")
         }
         if (item.attackDamage != null && item.attackSpeed != null) {
-            // Schema confirmed against Oraxen's own bundled items/weapons.yml example: a
-            // list of inline maps, keyed by the current Bukkit Attribute enum name (no
-            // "GENERIC_" prefix - that was removed from org.bukkit.attribute.Attribute).
             appendLine("  AttributeModifiers:")
-            appendLine("    - { attribute: ATTACK_DAMAGE, amount: ${formatWhole(item.attackDamage)}, operation: 0, slot: HAND }")
-            appendLine("    - { attribute: ATTACK_SPEED, amount: ${item.attackSpeed}, operation: 0, slot: HAND }")
+            appendAttributeModifier("ATTACK_DAMAGE", formatWhole(item.attackDamage), "HAND")
+            appendAttributeModifier("ATTACK_SPEED", item.attackSpeed.toString(), "HAND")
         }
         if (item.miningTier != null && item.toolKind != null) {
             appendLine("  Components:")
             appendToolComponent(item, "    ")
         }
+    }
+
+    /**
+     * Writes a wearable armor piece. The worn-body appearance is [item]'s own
+     * [baseMaterial][CatalogItem.Armor.baseMaterialFor]'s vanilla look - only the
+     * inventory icon and optional stat bonuses are custom (no custom worn skin yet).
+     * `Components.equippable` schema per Oraxen's component-based (1.21.2+) armor docs
+     * and the `AttributeModifiers` schema per its own bundled items/weapons.yml example
+     * (see [appendItem]) - not yet live-tested.
+     */
+    private fun StringBuilder.appendArmor(item: CatalogItem.Armor) {
+        appendLine("${item.id}:")
+        appendLine("  displayname: ${yamlQuote(item.displayNameFor(ProviderKind.ORAXEN))}")
+        appendLine("  material: ${item.baseMaterialFor(ProviderKind.ORAXEN).name}")
+        if (item.lore.isNotEmpty()) {
+            appendLine("  lore:")
+            item.lore.forEach { appendLine("    - ${yamlQuote(it)}") }
+        }
+        appendLine("  Pack:")
+        appendLine("    generate_model: true")
+        appendLine("    parent_model: \"item/generated\"")
+        appendLine("    textures:")
+        appendLine("      layer0: $namespace:${item.texture}")
+        appendLine("  Components:")
+        appendLine("    equippable:")
+        appendLine("      slot: ${item.slot.name}")
+        item.durability?.let {
+            appendLine("  Mechanics:")
+            appendLine("    durability:")
+            appendLine("      value: $it")
+        }
+        val stats = buildList {
+            item.armor?.let { add("ARMOR" to formatWhole(it)) }
+            item.armorToughness?.let { add("ARMOR_TOUGHNESS" to formatWhole(it)) }
+            item.knockbackResistance?.let { add("KNOCKBACK_RESISTANCE" to it.toString()) }
+        }
+        if (stats.isNotEmpty()) {
+            appendLine("  AttributeModifiers:")
+            stats.forEach { (attribute, amount) -> appendAttributeModifier(attribute, amount, item.slot.name) }
+        }
+    }
+
+    /**
+     * Schema confirmed against Oraxen's own bundled items/weapons.yml example: a list of
+     * inline maps, keyed by the current Bukkit Attribute enum name (no "GENERIC_" prefix -
+     * that was removed from org.bukkit.attribute.Attribute).
+     */
+    private fun StringBuilder.appendAttributeModifier(attribute: String, amount: String, slot: String) {
+        appendLine("    - { attribute: $attribute, amount: $amount, operation: 0, slot: $slot }")
     }
 
     // ── Recipes ──────────────────────────────────────────────────────────────
@@ -374,14 +429,7 @@ class OraxenSetup(
             """.trimIndent())
         }
         for (piece in furniture) {
-            File(itemModels, "${piece.id}.json").writeText("""
-{
-  "parent": "minecraft:item/generated",
-  "textures": {
-    "layer0": "$namespace:${piece.texture}"
-  }
-}
-            """.trimIndent())
+            File(itemModels, "${piece.id}.json").writeText(chairShapedModelJson(namespace, piece.texture))
         }
         return blocks.size * 2 + furniture.size
     }

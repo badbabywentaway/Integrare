@@ -18,6 +18,7 @@
 package org.stephanosbad.integrare.catalog
 
 import org.bukkit.Material
+import org.bukkit.inventory.EquipmentSlot
 import org.stephanosbad.integrare.ProviderKind
 
 /**
@@ -101,6 +102,38 @@ sealed interface CatalogItem {
         override val permission: String? = null,
         override val overrides: Map<ProviderKind, Overrides> = emptyMap()
     ) : CatalogItem
+
+    /**
+     * A wearable armor piece. Only [ItemsAdderProvider][org.stephanosbad.integrare.provider.ItemsAdderProvider],
+     * [OraxenProvider][org.stephanosbad.integrare.provider.OraxenProvider] and
+     * [NexoProvider][org.stephanosbad.integrare.provider.NexoProvider] support this kind for now -
+     * the Native provider isn't wired up yet. The worn-body appearance is [baseMaterial]'s own
+     * vanilla look; only the inventory icon is custom. [slot] must be HEAD, CHEST, LEGS or FEET
+     * (validated by [ItemCatalog]).
+     *
+     * @property slot Equipment slot this piece is worn in
+     * @property baseMaterial Vanilla armor material the custom item is built on
+     * @property durability Maximum durability, replacing the base material's
+     * @property armor Bonus armor points, on top of [baseMaterial]'s own
+     * @property armorToughness Bonus armor toughness, on top of [baseMaterial]'s own
+     * @property knockbackResistance Bonus knockback resistance, on top of [baseMaterial]'s own
+     */
+    data class Armor(
+        override val id: String,
+        override val displayName: String,
+        override val texture: String,
+        val slot: EquipmentSlot,
+        val baseMaterial: Material,
+        val durability: Int? = null,
+        val armor: Double? = null,
+        val armorToughness: Double? = null,
+        val knockbackResistance: Double? = null,
+        override val lore: List<String> = emptyList(),
+        override val permission: String? = null,
+        override val overrides: Map<ProviderKind, Overrides> = emptyMap()
+    ) : CatalogItem {
+        fun baseMaterialFor(provider: ProviderKind): Material = overrides[provider]?.baseMaterial ?: baseMaterial
+    }
 
     /** Provider-specific values that take precedence over the item's own. */
     data class Overrides(

@@ -75,6 +75,70 @@ internal fun StringBuilder.appendToolComponent(item: CatalogItem.Item, indent: S
     appendLine("$indent      correct_for_drops: true")
 }
 
+/**
+ * A rough, blocky chair-like shape (seat, backrest, four legs) built entirely from the
+ * one flat texture every furniture piece already has. This library doesn't yet support a
+ * real custom 3D model per furniture item, so this is the placeholder render for any
+ * furniture piece - strictly better than a flat icon standing up in the world (what it
+ * replaced), even for a furniture piece that isn't conceptually a chair.
+ *
+ * [texture] must be a solid-filled image, not a transparent icon-style cutout (like the
+ * ones this library's other icons use) - mapped onto a cuboid's faces, a mostly-transparent
+ * icon renders as a near-invisible silhouette instead of a filled shape. Live-tested: this
+ * broke the chair's appearance and looked like "a flat imprint"/"a red silhouette" until
+ * the demo's furniture texture was redrawn as a solid fill.
+ *
+ * The `display.fixed` override is required and must be exactly this - without it, or with
+ * identity, the model renders lying down or tipped in a DISPLAY_ENTITY/fixed-transform
+ * furniture piece (confirmed live across several rotation values; Oraxen's own bundled
+ * `pack/models/default/chair.json` needs a similar correction for its "fixed" entry, for
+ * what's presumably the same underlying reason - some default non-identity baseline this
+ * transform context applies that "ground"/dropped-item rendering doesn't).
+ */
+internal fun chairShapedModelJson(namespace: String, texture: String): String {
+    val tex = "$namespace:$texture"
+    fun cuboid(from: List<Int>, to: List<Int>) = """
+        {
+          "from": [${from.joinToString(", ")}],
+          "to": [${to.joinToString(", ")}],
+          "faces": {
+            "down": { "texture": "#texture" },
+            "up": { "texture": "#texture" },
+            "north": { "texture": "#texture" },
+            "south": { "texture": "#texture" },
+            "west": { "texture": "#texture" },
+            "east": { "texture": "#texture" }
+          }
+        }
+    """.trimIndent()
+    val elements = listOf(
+        cuboid(listOf(2, 7, 2), listOf(14, 9, 14)), // seat
+        cuboid(listOf(2, 9, 2), listOf(14, 16, 4)), // backrest
+        cuboid(listOf(2, 0, 2), listOf(4, 7, 4)), // leg
+        cuboid(listOf(10, 0, 2), listOf(12, 7, 4)), // leg
+        cuboid(listOf(2, 0, 10), listOf(4, 7, 12)), // leg
+        cuboid(listOf(10, 0, 10), listOf(12, 7, 12)) // leg
+    ).joinToString(",\n")
+    return """
+        {
+          "textures": {
+            "particle": "$tex",
+            "texture": "$tex"
+          },
+          "elements": [
+        $elements
+          ],
+          "display": {
+            "fixed": {
+              "rotation": [-90, 0, 0],
+              "translation": [0, 8, 0],
+              "scale": [1, 1, 1]
+            }
+          }
+        }
+    """.trimIndent()
+}
+
 /** Writes a README describing what was generated and what to do next. */
 internal fun writeReadme(
     file: File,

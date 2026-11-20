@@ -165,6 +165,7 @@ class NexoSetup(
                 is CatalogItem.Block -> appendBlock(item)
                 is CatalogItem.Item -> appendItem(item)
                 is CatalogItem.Furniture -> appendFurniture(item)
+                is CatalogItem.Armor -> appendArmor(item)
             }
             appendLine()
         }
@@ -209,17 +210,53 @@ class NexoSetup(
         }
         if (item.attackDamage != null && item.attackSpeed != null) {
             appendLine("  AttributeModifiers:")
-            appendAttribute("attack_damage", formatWhole(item.attackDamage), item)
-            appendAttribute("attack_speed", item.attackSpeed.toString(), item)
+            appendAttribute("attack_damage", formatWhole(item.attackDamage), item.id, "mainhand")
+            appendAttribute("attack_speed", item.attackSpeed.toString(), item.id, "mainhand")
         }
     }
 
-    private fun StringBuilder.appendAttribute(attribute: String, amount: String, item: CatalogItem.Item) {
+    /**
+     * Writes a wearable armor piece. The worn-body appearance is [item]'s own
+     * [baseMaterial][CatalogItem.Armor.baseMaterialFor]'s vanilla look - only the
+     * inventory icon and optional stat bonuses are custom (no custom worn skin yet).
+     * `Components.equippable` and `AttributeModifiers` schema per Nexo's component-based
+     * (1.21.2+) armor docs - not yet live-tested.
+     */
+    private fun StringBuilder.appendArmor(item: CatalogItem.Armor) {
+        appendLine("${item.id}:")
+        appendLine("  itemname: ${yamlQuote(item.displayNameFor(ProviderKind.NEXO))}")
+        appendLine("  material: ${item.baseMaterialFor(ProviderKind.NEXO).name}")
+        if (item.lore.isNotEmpty()) {
+            appendLine("  lore:")
+            item.lore.forEach { appendLine("    - ${yamlQuote(it)}") }
+        }
+        appendLine("  Pack:")
+        appendLine("    generate_model: true")
+        appendLine("    parent_model: \"item/generated\"")
+        appendLine("    textures:")
+        appendLine("      layer0: $namespace:${item.texture}")
+        appendLine("  Components:")
+        item.durability?.let { appendLine("    max_damage: $it") }
+        appendLine("    equippable:")
+        appendLine("      slot: ${item.slot.name}")
+        val slot = item.slot.name.lowercase()
+        val stats = buildList {
+            item.armor?.let { add("armor" to formatWhole(it)) }
+            item.armorToughness?.let { add("armor_toughness" to formatWhole(it)) }
+            item.knockbackResistance?.let { add("knockback_resistance" to it.toString()) }
+        }
+        if (stats.isNotEmpty()) {
+            appendLine("  AttributeModifiers:")
+            stats.forEach { (attribute, amount) -> appendAttribute(attribute, amount, item.id, slot) }
+        }
+    }
+
+    private fun StringBuilder.appendAttribute(attribute: String, amount: String, id: String, slot: String) {
         appendLine("    - attribute: $attribute")
         appendLine("      amount: $amount")
         appendLine("      operation: ADD_NUMBER")
-        appendLine("      slot: mainhand")
-        appendLine("      key: $namespace:${item.id}_$attribute")
+        appendLine("      slot: $slot")
+        appendLine("      key: $namespace:${id}_$attribute")
     }
 
     /**
@@ -270,14 +307,7 @@ class NexoSetup(
         for (piece in furniture) {
             val file = File(assetsFolder, "models/item/${piece.id}.json")
             file.parentFile.mkdirs()
-            file.writeText("""
-                {
-                  "parent": "item/generated",
-                  "textures": {
-                    "layer0": "$namespace:${piece.texture}"
-                  }
-                }
-            """.trimIndent())
+            file.writeText(chairShapedModelJson(namespace, piece.texture))
         }
     }
 
