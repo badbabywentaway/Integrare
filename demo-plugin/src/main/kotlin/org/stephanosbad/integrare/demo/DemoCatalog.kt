@@ -66,10 +66,11 @@ object DemoCatalog {
                 experience = 1.0f,
                 cookingTime = 200
             ),
-            // Stonecutting: cut a ruby block into a ruby chair
+            // Stonecutting: cut a ruby block into a ruby sword. ItemsAdder doesn't offer
+            // this recipe at all - see ItemsAdderSetup.registerExtraRecipes.
             CatalogRecipe.Stonecutting(
-                id = "ruby_chair_cut",
-                result = "ruby_chair",
+                id = "ruby_sword_cut",
+                result = "ruby_sword",
                 input = Ingredient.Custom("ruby_block")
             )
         )

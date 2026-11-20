@@ -6,7 +6,6 @@ package org.stephanosbad.integrare.demo
 
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
-import org.bukkit.Bukkit
 import org.bukkit.plugin.java.JavaPlugin
 import org.stephanosbad.integrare.CatalogItems
 import org.stephanosbad.integrare.CustomBlockClickListener
@@ -20,7 +19,9 @@ import org.stephanosbad.integrare.command.CatalogGiveCommand
 import org.stephanosbad.integrare.nativeitems.NativePackListener
 import org.stephanosbad.integrare.nativeitems.NativePackServer
 import org.stephanosbad.integrare.nativeitems.NativePlacementListener
+import org.stephanosbad.integrare.provider.ItemsAdderProvider
 import org.stephanosbad.integrare.provider.NativeItemProvider
+import org.stephanosbad.integrare.setup.ItemsAdderSetup
 import org.stephanosbad.integrare.setup.NativeSetup
 import org.stephanosbad.integrare.setup.ProviderSetup
 import java.io.File
@@ -74,6 +75,14 @@ class IntegrareDemoPlugin : JavaPlugin() {
                 NativePlacementListener(this, nativeProvider) { itemCatalog.isBlock(it.namespacedId) }, this
             )
             server.pluginManager.registerEvents(NativePackListener(nativeProvider), this)
+        }
+
+        if (customItemProviderManager.getProvider() is ItemsAdderProvider) {
+            // The one recipe shape ItemsAdder's own crafting engine can't express at all
+            // (a shapeless recipe needing more than one of the same ingredient) - registered
+            // straight through Bukkit instead. See ItemsAdderSetup.registerExtraRecipes for
+            // why stonecutting recipes aren't also ported this way.
+            (providerSetup() as? ItemsAdderSetup)?.registerExtraRecipes()
         }
 
         val provider = customItemProviderManager.getProvider()

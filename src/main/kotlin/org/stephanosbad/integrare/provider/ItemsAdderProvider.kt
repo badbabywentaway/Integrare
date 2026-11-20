@@ -18,19 +18,23 @@
 package org.stephanosbad.integrare.provider
 
 import dev.lone.itemsadder.api.CustomBlock
-import dev.lone.itemsadder.api.CustomFurniture
 import dev.lone.itemsadder.api.CustomStack
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.Material
+import org.bukkit.NamespacedKey
 import org.bukkit.block.Block
 import org.bukkit.block.BlockFace
 import org.bukkit.entity.Entity
+import org.bukkit.entity.Interaction
+import org.bukkit.entity.ItemDisplay
 import org.bukkit.inventory.ItemStack
+import org.bukkit.persistence.PersistentDataType
 import org.stephanosbad.integrare.CustomBlockInfo
 import org.stephanosbad.integrare.CustomFurnitureInfo
 import org.stephanosbad.integrare.CustomItemInfo
 import org.stephanosbad.integrare.CustomItemProvider
+import java.util.UUID
 
 /**
  * ItemsAdder implementation of the CustomItemProvider interface
@@ -96,41 +100,61 @@ class ItemsAdderProvider : CustomItemProvider {
         return Bukkit.getPluginManager().getPlugin("ItemsAdder") != null
     }
 
-    /**
-     * Places via [CustomFurniture.spawnPreciseNonSolid] (ItemsAdder's "simple" furniture
-     * API - ArmorStand/ItemFrame-based). [blockFace] is ignored: this API has no facing
-     * parameter, unlike [CustomComplexFurniture][dev.lone.itemsadder.api.CustomComplexFurniture]
-     * (entity-rendered furniture with bones/animations), which isn't wrapped yet.
-     */
-    override fun placeFurniture(namespacedId: String, location: Location, blockFace: BlockFace): Entity? =
-        CustomFurniture.spawnPreciseNonSolid(namespacedId, location)?.entity
+    // Furniture is placed directly through Bukkit rather than ItemsAdder's own
+    // CustomFurniture.spawnPreciseNonSolid, for two reasons found live-testing it:
+    // it throws rather than returning null for an entity type it doesn't recognize
+    // (e.g. a player), and - more fundamentally - the bare ItemDisplay it spawns has
+    // no usable hitbox at all, since Display entities are hardcoded non-pickable in
+    // vanilla. Pairing it with an invisible Interaction entity (vanilla's own answer
+    // to that: Interaction is specifically a clickable, otherwise-invisible hitbox
+    // companion for a Display entity) gives it a real one, same as the native
+    // provider's own furniture would need if it had this problem. The appearance
+    // still comes from ItemsAdder's own registered item via [CustomStack].
+    private val furnitureKey = NamespacedKey("integrare", "itemsadder_furniture_id")
+    private val furnitureLinkKey = NamespacedKey("integrare", "itemsadder_furniture_link")
 
-    /**
-     * [CustomFurniture.byAlreadySpawned] throws for entity types it doesn't recognize
-     * as furniture at all (observed: "Entity 'PLAYER' can't be a furniture!") rather
-     * than returning null for them like it does for an eligible-but-not-furniture
-     * entity - callers checking an arbitrary entity need both treated the same way.
-     */
-    private fun byAlreadySpawnedOrNull(entity: Entity): CustomFurniture? =
-        try {
-            CustomFurniture.byAlreadySpawned(entity)
-        } catch (e: RuntimeException) {
-            null
+    override fun placeFurniture(namespacedId: String, location: Location, blockFace: BlockFace): Entity? {
+        val stack = CustomStack.getInstance(namespacedId)?.itemStack ?: return null
+        val world = location.world ?: return null
+
+        val display = world.spawn(location, ItemDisplay::class.java)
+        display.setItemStack(stack)
+        display.setRotation(yawFor(blockFace), 0f)
+
+        val interaction = world.spawn(location, Interaction::class.java)
+        interaction.interactionWidth = 1f
+        interaction.interactionHeight = 1f
+
+        for (entity in listOf(display, interaction)) {
+            entity.persistentDataContainer.set(furnitureKey, PersistentDataType.STRING, namespacedId)
         }
+        display.persistentDataContainer.set(furnitureLinkKey, PersistentDataType.STRING, interaction.uniqueId.toString())
+        interaction.persistentDataContainer.set(furnitureLinkKey, PersistentDataType.STRING, display.uniqueId.toString())
+
+        return display
+    }
 
     override fun getFurniture(entity: Entity): CustomFurnitureInfo? {
-        val customFurniture = byAlreadySpawnedOrNull(entity) ?: return null
-        val parts = customFurniture.namespacedID.split(":", limit = 2)
-        return if (parts.size == 2) {
-            CustomFurnitureInfo(customFurniture.namespacedID, parts[0], parts[1])
-        } else {
-            null
-        }
+        val id = entity.persistentDataContainer.get(furnitureKey, PersistentDataType.STRING) ?: return null
+        val parts = id.split(":", limit = 2)
+        return if (parts.size == 2) CustomFurnitureInfo(id, parts[0], parts[1]) else null
     }
 
     override fun removeFurniture(entity: Entity): Boolean {
-        val customFurniture = byAlreadySpawnedOrNull(entity) ?: return false
-        customFurniture.remove(false)
+        if (!entity.persistentDataContainer.has(furnitureKey, PersistentDataType.STRING)) return false
+        entity.persistentDataContainer.get(furnitureLinkKey, PersistentDataType.STRING)
+            ?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+            ?.let { Bukkit.getEntity(it) }
+            ?.remove()
+        entity.remove()
         return true
+    }
+
+    private fun yawFor(blockFace: BlockFace): Float = when (blockFace) {
+        BlockFace.SOUTH -> 0f
+        BlockFace.WEST -> 90f
+        BlockFace.NORTH -> 180f
+        BlockFace.EAST -> 270f
+        else -> 0f
     }
 }

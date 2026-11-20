@@ -17,9 +17,14 @@
  */
 package org.stephanosbad.integrare.setup
 
+import dev.lone.itemsadder.api.CustomStack
 import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
+import org.bukkit.Bukkit
 import org.bukkit.Material
+import org.bukkit.NamespacedKey
+import org.bukkit.inventory.ItemStack
+import org.bukkit.inventory.ShapelessRecipe
 import org.stephanosbad.integrare.ProviderKind
 import org.stephanosbad.integrare.catalog.CatalogItem
 import org.stephanosbad.integrare.catalog.CatalogRecipe
@@ -176,6 +181,96 @@ class ItemsAdderSetup(
         }
     }
 
+    /**
+     * Registers, directly through Bukkit's own recipe API, the one recipe shape
+     * ItemsAdder's own crafting_table config can't express at all: a shapeless recipe
+     * needing more than one of the same ingredient (rejected outright as "Duplicate
+     * ingredient" - see the filter on [recipes]). A real Bukkit recipe works on any
+     * ItemStack regardless of which plugin created it, so this reaches ItemsAdder's own
+     * items through [CustomStack] rather than needing its own item/recipe system at all.
+     *
+     * Stonecutting is deliberately NOT ported here the same way, despite Bukkit's
+     * StonecuttingRecipe API working fine in isolation (verified with an all-vanilla
+     * recipe, and even with a vanilla item carrying an attribute-modifier component):
+     * live-testing found that a stonecutting recipe whose result is one of ItemsAdder's
+     * own items closes the stonecutter UI and returns the ingredients the instant the
+     * result slot is clicked, but only when that item carries ItemsAdder's own
+     * attribute_modifiers (a plain ItemsAdder item with no such component works fine).
+     * No exception is logged client or server side, and ItemsAdder's own jar has no
+     * stonecutter-related event handling at all (decompiled and confirmed), so whatever
+     * ItemsAdder does differently for an attributed item's NBT/components isn't visible
+     * from here. Rather than ship a result-slot that silently eats the player's
+     * ingredients on an unknown subset of items, this provider just doesn't offer
+     * stonecutting recipes at all (same as its own crafting_table config, see the
+     * comment in [itemsYaml]).
+     *
+     * Call during onEnable, after this catalog has already been through at least one
+     * setup+restart cycle - these items only resolve once ItemsAdder itself has loaded
+     * them from the config [install] wrote, same requirement the rest of this class has.
+     * Safe to call every boot: each recipe is re-registered under the same key, replacing
+     * any previous registration rather than erroring or duplicating it.
+     */
+    fun registerExtraRecipes() {
+        val duplicateShapeless = catalog.recipes.filterIsInstance<CatalogRecipe.Shapeless>()
+            .filter { it.isAvailable(resolveMaterial) }
+            .filter { recipe -> recipe.ingredients.groupingBy { ingredientText(it) }.eachCount().any { it.value > 1 } }
+        for (recipe in duplicateShapeless) {
+            if (skipFurnitureResult(recipe)) continue
+            val result = resultStack(recipe) ?: continue
+            val key = NamespacedKey(namespace, recipe.id)
+            val bukkitRecipe = ShapelessRecipe(key, result)
+            val counts = recipe.ingredients.groupingBy { ingredientText(it) }.eachCount()
+            var resolved = true
+            for ((text, count) in counts) {
+                val ingredient = recipe.ingredients.first { ingredientText(it) == text }
+                when (ingredient) {
+                    is Ingredient.Vanilla -> {
+                        val material = resolveMaterial(ingredient.material)
+                        if (material == null) {
+                            resolved = false
+                            break
+                        }
+                        bukkitRecipe.addIngredient(count, material)
+                    }
+                    is Ingredient.Custom -> {
+                        val itemStack = itemStackFor(ingredient.id)
+                        if (itemStack == null) {
+                            resolved = false
+                            break
+                        }
+                        bukkitRecipe.addIngredient(count, itemStack)
+                    }
+                }
+            }
+            if (resolved) {
+                Bukkit.removeRecipe(key)
+                Bukkit.addRecipe(bukkitRecipe)
+            }
+        }
+    }
+
+    /**
+     * ItemsAdder silently gives a furniture item a different base vanilla material than
+     * whatever was configured (observed: PAPER configured, CHERRY_SAPLING actually given -
+     * one of vanilla's "plant on a block" items, presumably so right-click placement has
+     * something to hook into) - using one as a Bukkit recipe's result closes the crafting
+     * UI the instant it's selected rather than producing it.
+     */
+    private fun skipFurnitureResult(recipe: CatalogRecipe): Boolean {
+        if (catalog.item(recipe.result) !is CatalogItem.Furniture) return false
+        logger.warning(
+            "Recipe '${recipe.id}' produces furniture item '${recipe.result}' - ItemsAdder remaps " +
+                "furniture to a different base material that breaks a Bukkit-registered recipe's " +
+                "result slot. Skipped."
+        )
+        return true
+    }
+
+    private fun itemStackFor(id: String): ItemStack? = CustomStack.getInstance("$namespace:$id")?.itemStack?.clone()
+
+    private fun resultStack(recipe: CatalogRecipe): ItemStack? =
+        itemStackFor(recipe.result)?.also { it.amount = recipe.amount }
+
     /** ItemsAdder uses legacy '&' colour codes */
     private fun legacyText(miniMessageText: String) = legacy.serialize(miniMessage.deserialize(miniMessageText))
 
@@ -262,7 +357,8 @@ class ItemsAdderSetup(
         // Stonecutting recipes aren't generated here: core ItemsAdder has no stonecutter
         // recipe type of its own - it requires the separate ItemsAdderAdditions addon,
         // which most installs won't have. Any CatalogRecipe.Stonecutting is silently
-        // skipped for this provider.
+        // skipped for this provider - see [registerExtraRecipes] for why it also isn't
+        // ported through Bukkit directly the way the duplicate-ingredient case is.
         if (craftingTableRecipes.isNotEmpty() || cookingRecipes.isNotEmpty()) {
             appendLine("recipes:")
             if (craftingTableRecipes.isNotEmpty()) {
