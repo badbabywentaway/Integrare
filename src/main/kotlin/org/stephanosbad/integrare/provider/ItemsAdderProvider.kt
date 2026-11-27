@@ -117,9 +117,18 @@ class ItemsAdderProvider : CustomItemProvider {
         val stack = CustomStack.getInstance(namespacedId)?.itemStack ?: return null
         val world = location.world ?: return null
 
-        val display = world.spawn(location, ItemDisplay::class.java)
+        // ItemDisplayTransform.NONE renders the model centered on the entity's own location
+        // rather than floor-anchored - a half-block Y lift puts its feet (y=0 in the model's
+        // own coordinates) back on the ground instead of sunk halfway into the block below.
+        // Live-tested: without this, the chair looked "halfway sunk into the block below it".
+        val display = world.spawn(location.clone().add(0.0, 0.5, 0.0), ItemDisplay::class.java)
         display.setItemStack(stack)
         display.setRotation(yawFor(blockFace), 0f)
+        // Explicit rather than relying on Bukkit's default: a custom furniture model (see
+        // ItemsAdderSetup.appendFurniture) is authored upright with no transform baked in,
+        // and NONE renders raw model geometry as-is - no per-context matrix to fight, unlike
+        // Oraxen/Nexo's furniture, which uses "fixed" and needs one (see chairShapedModelJson).
+        display.itemDisplayTransform = ItemDisplay.ItemDisplayTransform.NONE
 
         val interaction = world.spawn(location, Interaction::class.java)
         interaction.interactionWidth = 1f

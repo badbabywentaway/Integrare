@@ -82,21 +82,14 @@ internal fun StringBuilder.appendToolComponent(item: CatalogItem.Item, indent: S
  * furniture piece - strictly better than a flat icon standing up in the world (what it
  * replaced), even for a furniture piece that isn't conceptually a chair.
  *
- * [texture] must be a solid-filled image, not a transparent icon-style cutout (like the
- * ones this library's other icons use) - mapped onto a cuboid's faces, a mostly-transparent
+ * Shared by [chairShapedModelJson] and [chairShapedModelJsonRaw]. Both require their
+ * texture to be a solid-filled image, not a transparent icon-style cutout (like the ones
+ * this library's other icons use) - mapped onto a cuboid's faces, a mostly-transparent
  * icon renders as a near-invisible silhouette instead of a filled shape. Live-tested: this
  * broke the chair's appearance and looked like "a flat imprint"/"a red silhouette" until
  * the demo's furniture texture was redrawn as a solid fill.
- *
- * The `display.fixed` override is required and must be exactly this - without it, or with
- * identity, the model renders lying down or tipped in a DISPLAY_ENTITY/fixed-transform
- * furniture piece (confirmed live across several rotation values; Oraxen's own bundled
- * `pack/models/default/chair.json` needs a similar correction for its "fixed" entry, for
- * what's presumably the same underlying reason - some default non-identity baseline this
- * transform context applies that "ground"/dropped-item rendering doesn't).
  */
-internal fun chairShapedModelJson(namespace: String, texture: String): String {
-    val tex = "$namespace:$texture"
+private fun chairElementsJson(): String {
     fun cuboid(from: List<Int>, to: List<Int>) = """
         {
           "from": [${from.joinToString(", ")}],
@@ -111,7 +104,7 @@ internal fun chairShapedModelJson(namespace: String, texture: String): String {
           }
         }
     """.trimIndent()
-    val elements = listOf(
+    return listOf(
         cuboid(listOf(2, 7, 2), listOf(14, 9, 14)), // seat
         cuboid(listOf(2, 9, 2), listOf(14, 16, 4)), // backrest
         cuboid(listOf(2, 0, 2), listOf(4, 7, 4)), // leg
@@ -119,6 +112,29 @@ internal fun chairShapedModelJson(namespace: String, texture: String): String {
         cuboid(listOf(2, 0, 10), listOf(4, 7, 12)), // leg
         cuboid(listOf(10, 0, 10), listOf(12, 7, 12)) // leg
     ).joinToString(",\n")
+}
+
+/**
+ * Chair shape for a provider whose furniture entity uses Minecraft's "fixed" transform
+ * context (Oraxen and Nexo's DISPLAY_ENTITY/Component-based furniture).
+ *
+ * The `display.fixed` override is required and must be exactly this - without it, or with
+ * identity, the model renders lying down or tipped (confirmed live across several
+ * rotation values; Oraxen's own bundled `pack/models/default/chair.json` needs a similar
+ * correction for its "fixed" entry, for what's presumably the same underlying reason -
+ * some default non-identity baseline this transform context applies that "ground"/
+ * dropped-item rendering doesn't).
+ *
+ * The rotation puts the model on its feet, but it also swaps the model's local Y and Z
+ * axes for purposes of this same transform - `translation`'s 3rd component ends up
+ * controlling vertical position, not depth, counterintuitively. `scale` is free to size the
+ * piece up to better fill its block (tested up to 2x cleanly); each scale change needs
+ * translation retuned too, since scaling happens around a pivot point. Values here are
+ * confirmed live on Oraxen; not yet independently re-verified on Nexo, which shares this
+ * same helper and transform system.
+ */
+internal fun chairShapedModelJson(namespace: String, texture: String): String {
+    val tex = "$namespace:$texture"
     return """
         {
           "textures": {
@@ -126,15 +142,37 @@ internal fun chairShapedModelJson(namespace: String, texture: String): String {
             "texture": "$tex"
           },
           "elements": [
-        $elements
+        ${chairElementsJson()}
           ],
           "display": {
             "fixed": {
               "rotation": [-90, 0, 0],
-              "translation": [0, 8, 0],
-              "scale": [1, 1, 1]
+              "translation": [0, 0, -16],
+              "scale": [2, 2, 2]
             }
           }
+        }
+    """.trimIndent()
+}
+
+/**
+ * Same shape as [chairShapedModelJson], without the `display.fixed` override - for a
+ * provider whose furniture entity doesn't use Minecraft's "fixed" transform context at
+ * all (e.g. ItemsAdderProvider's manually-spawned ItemDisplay, left at Bukkit's default
+ * ItemDisplayTransform.NONE), where that block would never even apply and the raw,
+ * already-upright geometry should render correctly with no correction.
+ */
+internal fun chairShapedModelJsonRaw(namespace: String, texture: String): String {
+    val tex = "$namespace:$texture"
+    return """
+        {
+          "textures": {
+            "particle": "$tex",
+            "texture": "$tex"
+          },
+          "elements": [
+        ${chairElementsJson()}
+          ]
         }
     """.trimIndent()
 }

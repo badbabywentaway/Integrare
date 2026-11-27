@@ -6,7 +6,6 @@ package org.stephanosbad.integrare.demo
 
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
-import org.bukkit.block.BlockFace
 import org.bukkit.command.Command
 import org.bukkit.command.CommandExecutor
 import org.bukkit.command.CommandSender
@@ -69,7 +68,11 @@ class DemoCommand(
                 val item = plugin.itemCatalog.item("ruby_chair")
                     ?: return sender.sendMessage(Component.text("ruby_chair isn't in the catalog.").color(NamedTextColor.RED))
                 val namespacedId = plugin.itemCatalog.namespacedId(item)
-                val entity = provider.placeFurniture(namespacedId, sender.location, yawToBlockFace(sender.location.yaw))
+                // Snapped to the center of the block under the player's feet, rather than
+                // the player's own fractional position, so repeated test placements land on
+                // the same exact spot relative to the block grid - needed to tell a model's
+                // own display-transform offset apart from wherever the player happened to stand.
+                val entity = provider.placeFurniture(namespacedId, blockCenter(sender), yawToBlockFace(sender.location.yaw))
                 if (entity != null) {
                     sender.sendMessage(Component.text("Placed a ruby chair.").color(NamedTextColor.GREEN))
                 } else {
@@ -116,13 +119,4 @@ class DemoCommand(
         return null
     }
 
-    private fun yawToBlockFace(yaw: Float): BlockFace {
-        val normalized = ((yaw % 360) + 360) % 360
-        return when {
-            normalized < 45 || normalized >= 315 -> BlockFace.SOUTH
-            normalized < 135 -> BlockFace.WEST
-            normalized < 225 -> BlockFace.NORTH
-            else -> BlockFace.EAST
-        }
-    }
 }

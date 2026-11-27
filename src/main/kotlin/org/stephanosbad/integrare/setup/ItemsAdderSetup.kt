@@ -152,6 +152,16 @@ class ItemsAdderSetup(
             }
             messages.add("  ✓ Copied $textures texture files")
 
+            if (furniture.isNotEmpty()) {
+                messages.add("Generating furniture models...")
+                for (piece in furniture) {
+                    val file = File(contentFolder, "resourcepack/assets/$namespace/models/item/${piece.id}.json")
+                    file.parentFile.mkdirs()
+                    file.writeText(chairShapedModelJsonRaw(namespace, piece.texture))
+                }
+                messages.add("  ✓ ${furniture.size} furniture models")
+            }
+
             messages.add("Creating README...")
             writeReadme(
                 File(contentFolder, "README.txt"), pluginName, "ItemsAdder", catalog,
@@ -159,7 +169,8 @@ class ItemsAdderSetup(
                     "configs/blocks.yml - block definitions",
                     "configs/items.yml - item and recipe definitions",
                     "configs/furniture.yml - furniture definitions",
-                    "resourcepack/assets/$namespace/textures/ - textures"
+                    "resourcepack/assets/$namespace/textures/ - textures",
+                    "resourcepack/assets/$namespace/models/item/ - furniture 3D shapes"
                 ),
                 nextSteps
             )
@@ -333,22 +344,30 @@ class ItemsAdderSetup(
     }
 
     /**
-     * Writes a static, non-seating, non-solid furniture piece as an item_display.
-     * Schema reconstructed from ItemsAdder's own docs (wiki.itemsadder.com/adding-content/furnitures) -
-     * key names/nesting corroborated across multiple fetches, but not copied from a verbatim
-     * example the way Oraxen/Nexo's furniture schema was; not yet live-tested either way.
+     * Writes a static, non-seating, non-solid furniture piece. Deliberately NOT a
+     * `behaviours.furniture` block (ItemsAdder's own native furniture system, letting a
+     * player right-click-place the item directly): this provider's own placeFurniture
+     * already bypasses ItemsAdder's native furniture entirely once placed (see that
+     * class's own comment for why - hitbox and exception bugs), but a player could still
+     * trigger ItemsAdder's *other* half, right-click placement, if `behaviours.furniture`
+     * were present - live-tested, and confirmed it spawns an entity with none of this
+     * provider's own position fix or tracking tags, so it looks sunk into the ground and
+     * can't be found by [CustomItemProvider.getFurniture]/removeFurniture afterward. With
+     * it gone, the only way to place this item is through this provider's own
+     * placeFurniture (wired up to a right-click listener in the demo plugin for
+     * ItemsAdder specifically, since Oraxen/Nexo's furniture mechanics don't have this
+     * problem - their own native right-click placement IS this provider's placeFurniture,
+     * just reached through their own API instead of raw Bukkit spawning).
+     *
+     * `graphics.model` (rather than [appendResource]'s flat `resource:`, as regular items
+     * use) points at a real 3D chair shape - see [chairShapedModelJsonRaw] for why this one
+     * has no `display.fixed` override, unlike Oraxen/Nexo's copy of the same shape.
      */
     private fun StringBuilder.appendFurniture(item: CatalogItem.Furniture) {
         appendCommon(item)
-        appendResource(Material.PAPER, item.texture)
-        appendLine("    behaviours:")
-        appendLine("      furniture:")
-        appendLine("        entity: item_display")
-        appendLine("        solid: false")
-        appendLine("        placeable_on:")
-        appendLine("          floor: true")
-        appendLine("          ceiling: false")
-        appendLine("          walls: false")
+        appendLine("    material: ${Material.PAPER.name}")
+        appendLine("    graphics:")
+        appendLine("      model: item/${item.id}")
     }
 
     private fun itemsYaml(): String = buildString {

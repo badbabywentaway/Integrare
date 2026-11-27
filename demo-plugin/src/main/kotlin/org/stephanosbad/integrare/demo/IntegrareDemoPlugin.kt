@@ -10,6 +10,8 @@ import org.bukkit.plugin.java.JavaPlugin
 import org.stephanosbad.integrare.CatalogItems
 import org.stephanosbad.integrare.CustomBlockClickListener
 import org.stephanosbad.integrare.CustomBlockHitListener
+import org.stephanosbad.integrare.CustomFurnitureHitListener
+import org.stephanosbad.integrare.CustomFurniturePlaceListener
 import org.stephanosbad.integrare.CustomItemUseListener
 import org.stephanosbad.integrare.CustomItemProviderManager
 import org.stephanosbad.integrare.SlotRegistry
@@ -77,12 +79,70 @@ class IntegrareDemoPlugin : JavaPlugin() {
             server.pluginManager.registerEvents(NativePackListener(nativeProvider), this)
         }
 
-        if (customItemProviderManager.getProvider() is ItemsAdderProvider) {
+        val itemsAdderProvider = customItemProviderManager.getProvider() as? ItemsAdderProvider
+        if (itemsAdderProvider != null) {
             // The one recipe shape ItemsAdder's own crafting engine can't express at all
             // (a shapeless recipe needing more than one of the same ingredient) - registered
             // straight through Bukkit instead. See ItemsAdderSetup.registerExtraRecipes for
             // why stonecutting recipes aren't also ported this way.
             (providerSetup() as? ItemsAdderSetup)?.registerExtraRecipes()
+
+            // Right-click-to-place for furniture: this provider's own placeFurniture is the
+            // only way to place it here (see ItemsAdderSetup.appendFurniture for why
+            // ItemsAdder's own native right-click placement is deliberately not wired up -
+            // it bypassed this provider's position fix and tracking tags). Oraxen/Nexo don't
+            // need an equivalent listener: their own native right-click placement already
+            // calls through to this same placeFurniture, just via their own API.
+            // CustomFurniturePlaceListener (not CustomItemUseListener - that one's scoped to
+            // wand-style item use, not block interactions) resolves the clicked-face-adjacent
+            // spot itself, same as a held block would place at, rather than wherever the
+            // player happens to be standing.
+            server.pluginManager.registerEvents(
+                CustomFurniturePlaceListener(
+                    provider = itemsAdderProvider,
+                    matches = { it.itemName == "ruby_chair" },
+                    onPlace = { _, player, location, _ ->
+                        val item = itemCatalog.item("ruby_chair")
+                        if (item != null) {
+                            val entity = itemsAdderProvider.placeFurniture(
+                                itemCatalog.namespacedId(item), location, yawToBlockFace(player.location.yaw)
+                            )
+                            // Placement doesn't consume the item on its own - this is the
+                            // demo's own consumption, same as a real plugin's placement
+                            // listener would need to do.
+                            if (entity != null) {
+                                val held = player.inventory.itemInMainHand
+                                if (held.amount > 1) held.amount -= 1 else player.inventory.setItemInMainHand(null)
+                            }
+                        }
+                        true
+                    }
+                ),
+                this
+            )
+
+            // Break-to-remove, the other half of the same gap: a bare Display can't be hit
+            // at all, so without this a placed chair could only ever be removed through
+            // /integraredemo furniture remove, unlike Oraxen/Nexo's furniture (removable
+            // normally since it's their own native placement doing the removing too).
+            // One hit removes it outright, no mining-style wear/crack progress - matching
+            // how vanilla's own clickable decorations (item frames, armor stands) break in
+            // a single hit rather than needing sustained damage like a block.
+            server.pluginManager.registerEvents(
+                CustomFurnitureHitListener(
+                    provider = itemsAdderProvider,
+                    matches = { it.furnitureName == "ruby_chair" },
+                    onHit = { entity, player ->
+                        val info = itemsAdderProvider.getFurniture(entity)
+                        itemsAdderProvider.removeFurniture(entity)
+                        info?.let { itemsAdderProvider.getItemStack(it.namespacedId) }
+                            ?.let { player.inventory.addItem(it) }
+                        player.sendMessage(Component.text("Broke the Ruby Chair.").color(NamedTextColor.RED))
+                        true
+                    }
+                ),
+                this
+            )
         }
 
         val provider = customItemProviderManager.getProvider()
