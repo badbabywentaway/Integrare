@@ -18,6 +18,7 @@
 package org.stephanosbad.integrare.provider
 
 import dev.lone.itemsadder.api.CustomBlock
+import dev.lone.itemsadder.api.CustomFurniture
 import dev.lone.itemsadder.api.CustomStack
 import org.bukkit.Bukkit
 import org.bukkit.Location
@@ -26,15 +27,12 @@ import org.bukkit.NamespacedKey
 import org.bukkit.block.Block
 import org.bukkit.block.BlockFace
 import org.bukkit.entity.Entity
-import org.bukkit.entity.Interaction
-import org.bukkit.entity.ItemDisplay
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
 import org.stephanosbad.integrare.CustomBlockInfo
 import org.stephanosbad.integrare.CustomFurnitureInfo
 import org.stephanosbad.integrare.CustomItemInfo
 import org.stephanosbad.integrare.CustomItemProvider
-import java.util.UUID
 
 /**
  * ItemsAdder implementation of the CustomItemProvider interface
@@ -100,47 +98,35 @@ class ItemsAdderProvider : CustomItemProvider {
         return Bukkit.getPluginManager().getPlugin("ItemsAdder") != null
     }
 
-    // Furniture is placed directly through Bukkit rather than ItemsAdder's own
-    // CustomFurniture.spawnPreciseNonSolid, for two reasons found live-testing it:
-    // it throws rather than returning null for an entity type it doesn't recognize
-    // (e.g. a player), and - more fundamentally - the bare ItemDisplay it spawns has
-    // no usable hitbox at all, since Display entities are hardcoded non-pickable in
-    // vanilla. Pairing it with an invisible Interaction entity (vanilla's own answer
-    // to that: Interaction is specifically a clickable, otherwise-invisible hitbox
-    // companion for a Display entity) gives it a real one, same as the native
-    // provider's own furniture would need if it had this problem. The appearance
-    // still comes from ItemsAdder's own registered item via [CustomStack].
+    // Furniture is placed through ItemsAdder's own CustomFurniture.spawnPreciseNonSolid
+    // now, not a manual Bukkit-spawned entity - that was a deliberate bypass for two bugs
+    // found live-testing an earlier ItemsAdder build: it threw instead of returning null
+    // for an item that doesn't resolve/isn't furniture-typed, and the bare ItemDisplay it
+    // spawns appeared to have no usable hitbox (Display entities are hardcoded non-pickable
+    // in vanilla, with no Interaction-entity pairing found decompiling this provider's own
+    // furniture-spawning class). A later beta fixed the first outright (confirmed by
+    // decompiling it: returns null cleanly now); the second turned out to already work live
+    // despite the decompiled read - ItemsAdder's own furniture clearly does give it a
+    // working hitbox and break interaction, by some mechanism this session's static
+    // decompilation missed. Ground truth from live testing wins over that reading.
     private val furnitureKey = NamespacedKey("integrare", "itemsadder_furniture_id")
-    private val furnitureLinkKey = NamespacedKey("integrare", "itemsadder_furniture_link")
 
+    // blockFace is unused here: spawnPreciseNonSolid takes no rotation parameter of its own,
+    // reading the Location's own yaw for orientation instead - already set by every caller
+    // in this codebase (see FurniturePlacement.kt/CustomFurniturePlaceListener), so nothing
+    // is lost by not threading blockFace through to it.
     override fun placeFurniture(namespacedId: String, location: Location, blockFace: BlockFace): Entity? {
-        val stack = CustomStack.getInstance(namespacedId)?.itemStack ?: return null
-        val world = location.world ?: return null
-
-        // ItemDisplayTransform.NONE renders the model centered on the entity's own location
-        // rather than floor-anchored - a half-block Y lift puts its feet (y=0 in the model's
-        // own coordinates) back on the ground instead of sunk halfway into the block below.
-        // Live-tested: without this, the chair looked "halfway sunk into the block below it".
-        val display = world.spawn(location.clone().add(0.0, 0.5, 0.0), ItemDisplay::class.java)
-        display.setItemStack(stack)
-        display.setRotation(yawFor(blockFace), 0f)
-        // Explicit rather than relying on Bukkit's default: a custom furniture model (see
-        // ItemsAdderSetup.appendFurniture) is authored upright with no transform baked in,
-        // and NONE renders raw model geometry as-is - no per-context matrix to fight, unlike
-        // Oraxen/Nexo's furniture, which uses "fixed" and needs one (see chairShapedModelJson).
-        display.itemDisplayTransform = ItemDisplay.ItemDisplayTransform.NONE
-
-        val interaction = world.spawn(location, Interaction::class.java)
-        interaction.interactionWidth = 1f
-        interaction.interactionHeight = 1f
-
-        for (entity in listOf(display, interaction)) {
-            entity.persistentDataContainer.set(furnitureKey, PersistentDataType.STRING, namespacedId)
-        }
-        display.persistentDataContainer.set(furnitureLinkKey, PersistentDataType.STRING, interaction.uniqueId.toString())
-        interaction.persistentDataContainer.set(furnitureLinkKey, PersistentDataType.STRING, display.uniqueId.toString())
-
-        return display
+        // Live-tested: ItemsAdder's own spawn renders the model centered on the spawn
+        // location rather than floor-anchored, same symptom (and same fix) this provider's
+        // old manual ItemDisplayTransform.NONE spawn had - legs/seat sunk about half a block
+        // into the ground. Shifted here, before spawning, not via a post-spawn teleport:
+        // that moved the visible entity but left whatever hitbox ItemsAdder tracks
+        // internally at the original, un-lifted spot, desyncing them - the chair looked
+        // right but became very hard (or impossible) to hit accurately.
+        val entity = CustomFurniture.spawnPreciseNonSolid(namespacedId, location.clone().add(0.0, 0.5, 0.0))?.entity
+            ?: return null
+        entity.persistentDataContainer.set(furnitureKey, PersistentDataType.STRING, namespacedId)
+        return entity
     }
 
     override fun getFurniture(entity: Entity): CustomFurnitureInfo? {
@@ -151,19 +137,7 @@ class ItemsAdderProvider : CustomItemProvider {
 
     override fun removeFurniture(entity: Entity): Boolean {
         if (!entity.persistentDataContainer.has(furnitureKey, PersistentDataType.STRING)) return false
-        entity.persistentDataContainer.get(furnitureLinkKey, PersistentDataType.STRING)
-            ?.let { runCatching { UUID.fromString(it) }.getOrNull() }
-            ?.let { Bukkit.getEntity(it) }
-            ?.remove()
-        entity.remove()
+        CustomFurniture.remove(entity, false)
         return true
-    }
-
-    private fun yawFor(blockFace: BlockFace): Float = when (blockFace) {
-        BlockFace.SOUTH -> 0f
-        BlockFace.WEST -> 90f
-        BlockFace.NORTH -> 180f
-        BlockFace.EAST -> 270f
-        else -> 0f
     }
 }

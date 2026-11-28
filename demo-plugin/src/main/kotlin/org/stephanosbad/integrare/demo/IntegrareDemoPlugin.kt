@@ -10,7 +10,6 @@ import org.bukkit.plugin.java.JavaPlugin
 import org.stephanosbad.integrare.CatalogItems
 import org.stephanosbad.integrare.CustomBlockClickListener
 import org.stephanosbad.integrare.CustomBlockHitListener
-import org.stephanosbad.integrare.CustomFurnitureHitListener
 import org.stephanosbad.integrare.CustomFurniturePlaceListener
 import org.stephanosbad.integrare.CustomItemUseListener
 import org.stephanosbad.integrare.CustomItemProviderManager
@@ -87,12 +86,13 @@ class IntegrareDemoPlugin : JavaPlugin() {
             // why stonecutting recipes aren't also ported this way.
             (providerSetup() as? ItemsAdderSetup)?.registerExtraRecipes()
 
-            // Right-click-to-place for furniture: this provider's own placeFurniture is the
-            // only way to place it here (see ItemsAdderSetup.appendFurniture for why
-            // ItemsAdder's own native right-click placement is deliberately not wired up -
-            // it bypassed this provider's position fix and tracking tags). Oraxen/Nexo don't
-            // need an equivalent listener: their own native right-click placement already
-            // calls through to this same placeFurniture, just via their own API.
+            // Right-click-to-place for furniture, registered here (not left to ItemsAdder's
+            // own native right-click handling for this item) so the resulting entity gets
+            // this provider's own tracking tag - ItemsAdder's own placement wouldn't know to
+            // set it, leaving it unfindable by getFurniture/removeFurniture afterward.
+            // Registered at EventPriority.LOWEST and cancels the event on success, same
+            // ordering trick CustomBlockHitListener documents elsewhere in this codebase, so
+            // ItemsAdder's own handler for the same click never gets to run too.
             // CustomFurniturePlaceListener (not CustomItemUseListener - that one's scoped to
             // wand-style item use, not block interactions) resolves the clicked-face-adjacent
             // spot itself, same as a held block would place at, rather than wherever the
@@ -121,28 +121,14 @@ class IntegrareDemoPlugin : JavaPlugin() {
                 this
             )
 
-            // Break-to-remove, the other half of the same gap: a bare Display can't be hit
-            // at all, so without this a placed chair could only ever be removed through
-            // /integraredemo furniture remove, unlike Oraxen/Nexo's furniture (removable
-            // normally since it's their own native placement doing the removing too).
-            // One hit removes it outright, no mining-style wear/crack progress - matching
-            // how vanilla's own clickable decorations (item frames, armor stands) break in
-            // a single hit rather than needing sustained damage like a block.
-            server.pluginManager.registerEvents(
-                CustomFurnitureHitListener(
-                    provider = itemsAdderProvider,
-                    matches = { it.furnitureName == "ruby_chair" },
-                    onHit = { entity, player ->
-                        val info = itemsAdderProvider.getFurniture(entity)
-                        itemsAdderProvider.removeFurniture(entity)
-                        info?.let { itemsAdderProvider.getItemStack(it.namespacedId) }
-                            ?.let { player.inventory.addItem(it) }
-                        player.sendMessage(Component.text("Broke the Ruby Chair.").color(NamedTextColor.RED))
-                        true
-                    }
-                ),
-                this
-            )
+            // No break-to-remove listener here: ItemsAdder's own furniture spawning
+            // (ItemsAdderProvider.placeFurniture, now using its native
+            // CustomFurniture.spawnPreciseNonSolid) still doesn't pair a hitbox with the
+            // Display entity it creates, confirmed by decompiling a newer beta - accepted
+            // as a real limitation of ItemsAdder's own furniture system rather than a gap
+            // to keep working around. This furniture can't be targeted or attacked at all,
+            // so removal only ever goes through /integraredemo furniture remove (a sweep,
+            // not a click - see DemoCommand.findFurnitureInSight).
         }
 
         val provider = customItemProviderManager.getProvider()

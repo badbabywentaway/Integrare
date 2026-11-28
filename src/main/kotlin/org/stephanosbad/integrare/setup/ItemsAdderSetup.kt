@@ -344,30 +344,28 @@ class ItemsAdderSetup(
     }
 
     /**
-     * Writes a static, non-seating, non-solid furniture piece. Deliberately NOT a
-     * `behaviours.furniture` block (ItemsAdder's own native furniture system, letting a
-     * player right-click-place the item directly): this provider's own placeFurniture
-     * already bypasses ItemsAdder's native furniture entirely once placed (see that
-     * class's own comment for why - hitbox and exception bugs), but a player could still
-     * trigger ItemsAdder's *other* half, right-click placement, if `behaviours.furniture`
-     * were present - live-tested, and confirmed it spawns an entity with none of this
-     * provider's own position fix or tracking tags, so it looks sunk into the ground and
-     * can't be found by [CustomItemProvider.getFurniture]/removeFurniture afterward. With
-     * it gone, the only way to place this item is through this provider's own
-     * placeFurniture (wired up to a right-click listener in the demo plugin for
-     * ItemsAdder specifically, since Oraxen/Nexo's furniture mechanics don't have this
-     * problem - their own native right-click placement IS this provider's placeFurniture,
-     * just reached through their own API instead of raw Bukkit spawning).
-     *
-     * `graphics.model` (rather than [appendResource]'s flat `resource:`, as regular items
-     * use) points at a real 3D chair shape - see [chairShapedModelJsonRaw] for why this one
-     * has no `display.fixed` override, unlike Oraxen/Nexo's copy of the same shape.
+     * Writes a static, non-seating, non-solid furniture piece. `behaviours.furniture` is
+     * ItemsAdder's own native furniture declaration - required for ItemsAdderProvider's
+     * placeFurniture (CustomFurniture.spawnPreciseNonSolid) to recognize this item as
+     * furniture-typed at all; without it, that call just returns null (confirmed by
+     * decompiling ItemsAdder's own null-check for exactly this). `graphics.model` (rather
+     * than [appendResource]'s flat `resource:`, as regular items use) points at a real 3D
+     * chair shape - see [chairShapedModelJsonRaw] for why this one has no `display.fixed`
+     * override, unlike Oraxen/Nexo's copy of the same shape.
      */
     private fun StringBuilder.appendFurniture(item: CatalogItem.Furniture) {
         appendCommon(item)
         appendLine("    material: ${Material.PAPER.name}")
         appendLine("    graphics:")
         appendLine("      model: item/${item.id}")
+        appendLine("    behaviours:")
+        appendLine("      furniture:")
+        appendLine("        entity: item_display")
+        appendLine("        solid: false")
+        appendLine("        placeable_on:")
+        appendLine("          floor: true")
+        appendLine("          ceiling: false")
+        appendLine("          walls: false")
     }
 
     private fun itemsYaml(): String = buildString {
@@ -497,13 +495,14 @@ class ItemsAdderSetup(
      * five for a plain item's). `graphics.texture` is what ItemsAdder's own armor docs
      * show for this exact case.
      *
-     * Known limitation, accepted as-is: with no `graphics.model`/`CustomArmor` layer
-     * skin defined (out of scope for now, see [CatalogItem.Armor]'s own doc), ItemsAdder
+     * Known limitation, accepted as-is: with no real worn-body skin defined, ItemsAdder
      * renders the worn appearance as the flat icon floating near the slot rather than a
-     * normal-looking helmet - confirmed live, and nothing in the decompiled equipment
-     * loader (`slot`, `id`, `camera_overlay_id`, `sound`, `allowed_entities`, `glider`,
-     * `dispensable`, `swappable`, `damage_on_hurt`, `slot_attribute_modifiers` - the full
-     * key list) offers a way to suppress it. The stat bonuses and inventory icon both
+     * normal-looking helmet - confirmed live, including a dead-end attempt at a real 3D
+     * `graphics.model` instead (the item's own model/display block isn't what controls
+     * worn appearance at all in modern Minecraft - that's a wholly separate "equipment
+     * asset" format, `equipment.id` + a top-level `equipments:` block with real
+     * humanoid-skin layer textures, real art assets rather than something this generic
+     * placeholder-shape approach can produce). The stat bonuses and inventory icon both
      * work correctly regardless.
      */
     private fun StringBuilder.appendArmor(item: CatalogItem.Armor) {
